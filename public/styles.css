@@ -238,3 +238,4 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .auth-card{width:100%;max-width:420px;background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:26px 22px;display:grid;gap:14px}
 .auth-card .brand{padding:0}
 .auth-card h1{font-size:1.8rem}
+.gl-asset{background:var(--sky-soft);color:var(--sky)}

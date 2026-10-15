@@ -939,6 +939,7 @@ const isIOS=()=>/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platfo
   let me=null;
   try{me=await API.req("GET","/me")}
   catch(e){
+    if(e.code==="no_db"){$("#auth").hidden=false;$(".app").hidden=true;$("#auth").innerHTML=`<div class="auth-card"><div class="brand"><b>Kasi</b></div><h1>Almost there</h1><p class="muted">The app is online, but its database isn't connected yet. In Vercel, open your project's <b>Storage</b> tab, create a <b>Neon</b> database and connect it to this project, then redeploy.</p></div>`;return}
     if(e.code==="offline"||e.status>=500){
       let last=null;try{last=localStorage.getItem("kasi:lastUser")}catch(_){}
       if(last){Store.user=last;Store.loadOb();const snap=Store.readSnap();if(snap){Store.docs=JSON.parse(JSON.stringify(snap));Store.mode="offline";loadFromDocs(overlayOutbox(snap));showApp();render();renderStatus();return}}

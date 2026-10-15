@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#24503E" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F1512" media="(prefers-color-scheme: dark)">
+<meta name="description" content="Kasi: salary, bank accounts, credit cards, bills, fuel and vehicles in Sri Lankan Rupees.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Kasi">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="format-detection" content="telephone=no">
+<title>Kasi: salary to salary</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icons/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icons/icon-192.png" sizes="192x192">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css">
+<script src="/app.js" defer></script>
+</head>
+<body>
+<div id="netbar" class="netbar" role="status" hidden></div>
+<div id="auth" hidden></div>
+<div class="app" hidden>
+  <nav class="side" aria-label="Main">
+    <div class="brand"><b>Kasi</b><span>salary to salary</span></div>
+    <button class="add-big" data-act="add">+ Add Transaction</button>
+    <div id="sidenav"></div>
+    <div style="flex:1"></div>
+    <div class="status-line" id="storeStatus"></div>
+  </nav>
+  <main class="main"><div class="wrap" id="view"></div></main>
+</div>
+<nav class="bottom" id="bottomnav" aria-label="Main" hidden></nav>
+<div id="modal"></div>
+<noscript><p style="padding:24px">Kasi needs JavaScript turned on.</p></noscript>
+</body>
+</html>

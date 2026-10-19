@@ -5,6 +5,7 @@ const VIEWS=[["dashboard","Dashboard"],["salary","Salary & planner"],["transacti
 const CATS={
   Groceries:["Supermarket","Household items","Vegetables","Meat & fish","General groceries"],
   Food:["Restaurants","Takeaway","Coffee","Delivery","Lunch","Dinner","Snacks"],
+  Transport:["Taxi","Tuk-tuk","Bus","Train","Flights","Other"],
   Vehicle:["Service","Repairs","Insurance","Revenue licence","Tyres","Battery","Parking","Highway toll","Washing","Accessories","Leasing/loan","Other"],
   Shopping:["Clothing","Electronics","Home","Online","Gifts","Other"],
   Entertainment:["Movies","Events","Travel","Hobbies","Other"],
@@ -17,7 +18,7 @@ const CATS={
   Other:["Other"]
 };
 const BILL_CATS=CATS.Bills;
-const BUDGET_CATS=["Groceries","Food","Fuel","Vehicle","Shopping","Entertainment","Bills","Family","Medical","Other"];
+const BUDGET_CATS=["Groceries","Food","Transport","Fuel","Vehicle","Shopping","Entertainment","Bills","Family","Medical","Other"];
 const METHODS=["Cash","Bank Account","Debit Card","Credit Card","Bank Transfer","Digital Wallet"];
 const ACCT_TYPES=["Salary","Current","Savings","Fixed Deposit","Investment","Cash","Digital Wallet"];
 const SAVING_TYPES=["Savings","Fixed Deposit","Investment"];
@@ -351,6 +352,7 @@ function vDashboard(){
   const heroWarn=P.safe<0;
   const catTile=(c)=>{const v=T.byCat[c]||0,b=+bud[c]||0,p=b?v/b*100:0;return`<div class="stat"><span>${c}</span><b>${rs0(v)}</b>${b?`<div class="bar" style="margin-top:6px"><i class="${pctCls(p)}" style="width:${Math.min(100,p)}%"></i></div><em>${Math.round(p)}% of ${rs0(b)}</em>`:`<em>No budget set</em>`}</div>`};
   return`${head("Good "+greet(),fdate(today(),{weekday:"long",day:"numeric",month:"long"}),`<button class="btn" data-act="nav" data-v="reports">Reports</button>`)}
+  ${ME.hasRecovery?"":`<div class="panel" style="border-color:var(--saffron);margin-bottom:16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap"><p style="flex:1;min-width:220px"><b>Create a recovery key.</b> It lets you get back in if you ever forget your password.</p><button class="btn primary sm" data-act="newkey">Create key</button></div>`}
   <section class="hero ${heroWarn?"warn":""}" aria-label="Safe to spend">
     <div>
       <p class="lead">${heroWarn?"You're over plan until next salary by":"You can safely spend"}</p>
@@ -622,6 +624,12 @@ function vSettings(){const n=L().all.length;
     <div class="actions" style="justify-content:flex-start;margin-top:12px"><button class="btn" data-act="demo">Load example data</button><button class="btn danger" data-act="wipe">Delete all data</button></div>
     <div class="actions" style="justify-content:flex-start;margin-top:12px"><button class="btn" data-act="logout">Sign out</button><button class="btn" data-act="chpw">Change password</button><button class="btn danger" data-act="delacct">Delete account</button></div>
     <input type="file" id="importFile" accept="application/json,.json" hidden></div></div>
+  <div class="section grid g2"><div class="panel"><h2 style="margin-bottom:8px">Recovery key</h2>
+    <p class="muted" style="margin-bottom:12px">${ME.hasRecovery?"You have a recovery key. If you've lost it, create a new one; the old one stops working.":"You don't have a recovery key yet. Without one, a forgotten password means losing access to your data."}</p>
+    <button class="btn ${ME.hasRecovery?"":"primary"}" data-act="newkey">${ME.hasRecovery?"Create a new recovery key":"Create a recovery key"}</button></div>
+  <div class="panel"><h2 style="margin-bottom:8px">Invite others</h2>
+    <p class="muted" style="margin-bottom:12px">${!AUTH_CFG||!AUTH_CFG.signupOpen?"New sign-ups are closed. The site owner can open them in Vercel by adding OPEN_SIGNUP with the value true.":AUTH_CFG.codeRequired?"New people need the sign-up code to create an account. Share the code along with the link.":"Anyone with the link can create their own private account. They can't see your data, and you can't see theirs."}</p>
+    <button class="btn" data-act="share-app">Share the Kasi link</button></div></div>
   <div class="section panel"><h2 style="margin-bottom:8px">How Kasi counts money</h2><div class="muted" style="max-width:70ch;display:grid;gap:6px">
     <p>Card purchases are spending on the day you buy. Paying the card from your bank moves money, so it's never counted again.</p>
     <p>Transfers between your own accounts, into savings and back out of savings are never income or spending. A transfer fee is counted as a bank charge.</p>
@@ -709,13 +717,79 @@ function closeSheet(){$("#modal").innerHTML=""}
 
 function chooser(){openSheet("Add transaction",`<div class="types">
   ${[["expense","Expense","Cash, bank or debit"],["income","Income","Salary or other"],["transfer","Transfer","Between your accounts"],["cc_purchase","Credit card purchase","Spent on a card"],["cc_payment","Credit card payment","Pay a card from bank"],["bill","Bill payment","Electricity, rent, loans"],["fuel","Fuel","Linked to a vehicle"],["refund","Refund","Money back"],["asset_buy","Asset purchase","Land, gold, laptop"],["share_buy","Buy shares","CSE share purchase"]].map(([k,l,s])=>`<button data-act="add" data-type="${k}"><div class="glyph ${k==="income"?"gl-inc":k==="transfer"||k==="cc_payment"?"gl-xfer":k==="cc_purchase"?"gl-card":k==="refund"?"gl-ref":k==="asset_buy"||k==="share_buy"?"gl-asset":"gl-exp"}">${{expense:"Ex",income:"In",transfer:"⇄",cc_purchase:"CC",cc_payment:"⇄",bill:"B",fuel:"F",refund:"Rf",asset_buy:"As",share_buy:"Sh"}[k]}</div><div>${l}<small>${s}</small></div></button>`).join("")}</div>
-  <div class="more-types chips"><button class="chip" data-act="add" data-type="transfer" data-tosav="1">Savings transfer</button><button class="chip" data-act="add" data-type="transfer" data-preset="withdraw">Cash withdrawal</button><button class="chip" data-act="add" data-type="transfer" data-preset="deposit">Cash deposit</button><button class="chip" data-act="add" data-type="asset_sell">Asset sale</button><button class="chip" data-act="add" data-type="share_sell">Sell shares</button><button class="chip" data-act="add" data-type="dividend">Dividend</button></div>`)}
+  <div class="more-types chips"><button class="chip" data-act="add" data-type="transfer" data-tosav="1">Savings transfer</button><button class="chip" data-act="add" data-type="transfer" data-preset="withdraw">Cash withdrawal</button><button class="chip" data-act="add" data-type="transfer" data-preset="deposit">Cash deposit</button><button class="chip" data-act="paste">Paste a receipt or SMS</button><button class="chip" data-act="add" data-type="asset_sell">Asset sale</button><button class="chip" data-act="add" data-type="share_sell">Sell shares</button><button class="chip" data-act="add" data-type="dividend">Dividend</button></div>`)}
 function moreMenu(){openSheet("More",`<div class="types">${VIEWS.filter(([k])=>!["dashboard","transactions","budget"].includes(k)).map(([k,l])=>`<button data-act="nav" data-v="${k}"><div>${l}</div></button>`).join("")}</div>`)}
 
 /* ---------- Transaction form ---------- */
 const opt=(arr,val)=>arr.map(([v,l])=>`<option value="${esc(v)}" ${String(v)===String(val??"")?"selected":""}>${esc(l)}</option>`).join("");
 const fld=(label,inner,cls)=>`<label class="fld ${cls||""}"><span>${label}</span>${inner}</label>`;
 const acctsFor=method=>S.accounts.filter(a=>method==="Cash"?a.type==="Cash":method==="Digital Wallet"?a.type==="Digital Wallet":a.type!=="Cash"&&a.type!=="Digital Wallet");
+/* Smart categories: built-in Sri Lankan merchants, then whatever you've done before. */
+const MERCHANT_RULES=[
+  [/uber\s*eats/i,"Uber Eats","Food","Delivery"],[/pick\s*me\s*food/i,"PickMe Food","Food","Delivery"],
+  [/pick\s*me/i,"PickMe","Transport","Taxi"],[/\buber\b|thanks\s+for\s+riding/i,"Uber","Transport","Taxi"],[/kangaroo\s*cabs?/i,"Kangaroo Cabs","Transport","Taxi"],
+  [/\bsltb\b/i,"SLTB","Transport","Bus"],[/railway|train\s*ticket/i,"Sri Lanka Railways","Transport","Train"],[/srilankan\s*airlines|fits\s*air|cinnamon\s*air/i,null,"Transport","Flights"],
+  [/keells/i,"Keells","Groceries","Supermarket"],[/cargills|food\s*city/i,"Cargills Food City","Groceries","Supermarket"],[/arpico/i,"Arpico Supercentre","Groceries","Supermarket"],
+  [/glomark/i,"Glomark","Groceries","Supermarket"],[/laugfs\s*super/i,"Laugfs Super","Groceries","Supermarket"],[/\bspar\b/i,"SPAR","Groceries","Supermarket"],
+  [/ceypetco|ceylon\s*petroleum|lanka\s*ioc|\bioc\b|sinopec|rm\s*parks/i,null,"Fuel",null],
+  [/dialog/i,"Dialog","Bills","Mobile"],[/mobitel/i,"Mobitel","Bills","Mobile"],[/airtel|hutch/i,null,"Bills","Mobile"],
+  [/\bslt\b|sri\s*lanka\s*telecom/i,"SLT-Mobitel","Bills","Internet"],[/\bceb\b|ceylon\s*electricity|\bleco\b/i,null,"Bills","Electricity"],[/nwsdb|water\s*board/i,"NWSDB","Bills","Water"],
+  [/netflix|spotify|youtube\s*premium|disney|icloud|apple\.com\/bill/i,null,"Bills","Streaming subscriptions"],
+  [/daraz|aliexpress|amazon|temu/i,null,"Shopping","Online"],[/odel|fashion\s*bug|nolimit|cool\s*planet|house\s*of\s*fashion/i,null,"Shopping","Clothing"],
+  [/abans|softlogic|singer|damro/i,null,"Shopping","Electronics"],
+  [/kfc|pizza\s*hut|burger\s*king|mcdonald|domino|taco\s*bell|subway/i,null,"Food","Takeaway"],
+  [/barista|java\s*lounge|coffee\s*bean|starbucks|\bcaf[eé]\b/i,null,"Food","Coffee"],
+  [/healthguard|osu\s*sala|pharmacy|pharma\b/i,null,"Medical","Pharmacy"],[/asiri|nawaloka|durdans|lanka\s*hospital|hospital/i,null,"Medical","Hospital"],
+  [/scope\s*cinema|\bpvr\b|liberty\s*(?:by|cinema)|cinema/i,null,"Entertainment","Movies"]];
+const normMerchant=m=>String(m||"").toLowerCase().replace(/[^a-z0-9]+/g,"");
+function learnedCat(m){const n=normMerchant(m);if(n.length<3)return null;const all=L().all;
+  for(let i=all.length-1;i>=0;i--){const t=all[i];if(!t.merchant||!t.cat||!(t.type==="expense"||t.type==="cc_purchase"))continue;const tn=normMerchant(t.merchant);
+    if(tn===n)return{cat:t.cat,sub:t.sub,learned:true,name:t.merchant}}return null}
+function ruleCat(text){for(const [re,name,cat,sub] of MERCHANT_RULES)if(re.test(text||""))return{cat,sub,name};return null}
+function suggestCat(m){if(!m||!String(m).trim())return null;return learnedCat(m)||ruleCat(m)}
+const MONTHS={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+const monthNum=w=>{w=String(w).toLowerCase();const n=MONTHS[w.slice(0,3)];return n&&("january february march april may june july august september sept october november december "+Object.keys(MONTHS).join(" ")).split(" ").includes(w)?n:0};
+function parseDateIn(text){const t0=today();const ok=(y,m,d)=>{y=+y;m=+m;d=+d;if(y<100)y+=2000;if(m<1||m>12||d<1||d>dim(y,m-1))return null;const s=y+"-"+pad(m)+"-"+pad(d);return s<=addDays(t0,1)&&s>=addMonths(t0,-24)?s:null};
+  let m;const tries=[[/(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/,x=>ok(x[1],x[2],x[3])],[/(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})/,x=>ok(x[3],x[2],x[1])],
+    [/(\d{1,2})(?:st|nd|rd|th)?[\s-]+([A-Za-z]{3,9})[\s,-]+(\d{2,4})/,x=>monthNum(x[2])?ok(x[3],monthNum(x[2]),x[1]):null],
+    [/([A-Za-z]{3,9})\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})/,x=>monthNum(x[1])?ok(x[3],monthNum(x[1]),x[2]):null]];
+  for(const [re,fn] of tries){const g=new RegExp(re.source,"g");while((m=g.exec(text))){const r=fn(m);if(r)return r}}return null}
+function parseReceipt(raw){const text=String(raw||"").replace(/\u00a0/g," ");const low=text.toLowerCase();const r={type:"expense"};
+  // amount: prefer amounts next to words like total/spent/debited; skip balances and limits
+  const re=/(?:rs\.?|lkr|රු\.?)\s*:?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)|([0-9][0-9,]*\.[0-9]{2})\s*(?:lkr|rs\b)/gi;let m,best=null;
+  while((m=re.exec(text))){const v=+(m[1]||m[2]).replace(/,/g,"");if(!(v>0))continue;const ctx=low.slice(Math.max(0,m.index-28),m.index);let sc=0;
+    if(/total|amount|spent|purchase|debited|paid|charged|txn|transaction|for\s*$|fare|payment of|withdraw/.test(ctx))sc+=3;
+    if(/bal|balance|avl|available|limit|outstanding|due|minimum|min\.?\s*pay|subtotal|discount|tip/.test(ctx))sc-=10;
+    if(!best||sc>best.sc)best={v,sc}}
+  if(best&&best.sc>-5)r.amount=Math.round(best.v*100)/100;
+  r.date=parseDateIn(text)||today();
+  // merchant
+  const rule=ruleCat(text);let merchant=rule&&rule.name;
+  if(!merchant){const mm=text.match(/\bat\s+([A-Za-z0-9][A-Za-z0-9 &'.*\/-]{1,40}?)(?=\s+(?:on|for|using|via|dated|at|from|ref)\b|\s*[,;\n(]|\.\s|\.$|\s+\d|\s+(?:lkr|rs)\b|$)/i);
+    if(mm){merchant=mm[1].replace(/\*.*$/,"").trim();if(merchant===merchant.toUpperCase())merchant=merchant.toLowerCase().replace(/\b[a-z]/g,c=>c.toUpperCase())}}
+  if(merchant)r.merchant=merchant;
+  // what kind of transaction
+  if(/refund|revers(?:al|ed)/i.test(text))r.type="refund";
+  else if(/credited\s+to|deposited|has\s+been\s+credited|salary\s+credit|received\s+(?:lkr|rs)/i.test(text)&&!/debited|spent|purchase/i.test(text))r.type="income";
+  const sug=(merchant&&learnedCat(merchant))||rule||(merchant&&ruleCat(merchant));
+  if(r.type==="income"){r.sub="Other income"}else if(sug){r.cat=sug.cat;r.sub=sug.sub||undefined;if(sug.cat==="Fuel"&&r.type==="expense")r.type="fuel"}else r.cat="Other";
+  // card or account from the last 4 digits
+  const digs=[...text.matchAll(/(?:ending(?:\s+with)?|ends?\s+(?:with|in)|card\s*(?:no\.?|number)?|a\/c(?:\s*no\.?)?|acc(?:oun)?t(?:\s*no\.?)?|x{2,}|\*{2,}|•{2,}|#)\s*:?\s*[x*•]*\s*(\d{4})\b/gi)].map(x=>x[1]);
+  for(const d of digs){const c=S.cards.find(c=>c.last4===d);if(c){r.card=c.id;r.method="Credit Card";break}
+    const a=S.accounts.find(a=>(a.last4&&a.last4===d)||(a.nick||"").replace(/\D/g,"").endsWith(d));if(a){r.acct=a.id;r.method=a.type==="Cash"?"Cash":a.type==="Digital Wallet"?"Digital Wallet":/debit\s*card|card/i.test(text)?"Debit Card":"Bank Account";break}}
+  if(!r.card&&!r.acct&&/credit\s*card/i.test(text)){const byBank=S.cards.filter(c=>c.bank&&low.includes(c.bank.toLowerCase().split(" ")[0]));const c=byBank.length===1?byBank[0]:S.cards.length===1?S.cards[0]:null;if(c){r.card=c.id;r.method="Credit Card"}}
+  return r}
+function openFromText(text){text=String(text||"").trim();if(!text){toast("There was nothing to read.");return}
+  if(!S.accounts.length){toast("Add a bank account first.");return}
+  const r=parseReceipt(text);const t={amount:r.amount,date:r.date,merchant:r.merchant,cat:r.cat,sub:r.sub,method:r.method,card:r.card,acct:r.acct};Object.keys(t).forEach(k=>t[k]===undefined&&delete t[k]);
+  if(r.type==="fuel"&&!S.vehicles.length)r.type="expense",t.cat="Other";
+  closeSheet();txForm(r.type,t,{fromShare:true,sub:r.sub});if(!r.amount)toast("Kasi couldn't find the amount. Please type it in.")}
+function pasteSheet(){openSheet("Add from a receipt or SMS",`<form class="f" data-form="paste"><label class="fld"><span>Paste a bank SMS, receipt or email</span><textarea name="text" rows="6" autofocus placeholder="e.g. Your card ending 4321 was used for LKR 1,240.00 at PICKME on 12/10/2026"></textarea></label>
+  <p class="hint">Kasi finds the amount, date, shop and card, then shows you the details to check before saving.${isIOS()?"":" On Android you can also share an SMS or receipt straight to Kasi from the Share menu."}</p>
+  <div class="actions"><button type="button" class="btn" data-act="close">Cancel</button><button class="btn primary">Read it</button></div></form>`)}
+function handleLaunchParams(){const q=new URLSearchParams(location.search);const shared=[q.get("share_title"),q.get("share_text"),q.get("share_url")].filter(Boolean).join("\n");
+  if(shared){history.replaceState(null,"","/");openFromText(shared);return}
+  if(q.has("add")){history.replaceState(null,"","/");chooser()}}
 function merchantList(){const s=new Set();for(const t of L().all)if(t.merchant)s.add(t.merchant);return[...s].slice(-200)}
 function lastUsed(field,cat){const all=L().all;for(let i=all.length-1;i>=0;i--){const t=all[i];if((!cat||t.cat===cat)&&t[field])return t[field]}return""}
 
@@ -736,7 +810,7 @@ function txForm(type,t,preset){preset=preset||{};t=t||{};const isEdit=!!t.id;con
   const receiptF=`<label class="fld"><span>Receipt photo ${t.receipt?"(attached, choose a new one to replace)":"(optional)"}</span><input type="file" name="receipt" accept="image/*" capture="environment"></label>`;
   const recurF=`<label class="chk"><input type="checkbox" name="recurring" ${t.recurring?"checked":""}> Recurring expense</label>`;
   const catSel=(cat,sub)=>{cat=cat||preset.cat||"Groceries";return`<div><span class="hint">Category</span><div class="chips" data-catchips style="margin-top:4px">${[...Object.keys(CATS).filter(c=>c!=="Bank charges"),...(type==="expense"||type==="cc_purchase"?["Fuel"]:[])].map(c=>`<button type="button" class="chip" data-cat="${esc(c)}" aria-pressed="${c===cat}">${esc(c)}</button>`).join("")}</div><input type="hidden" name="cat" value="${esc(cat)}"></div>
-    <div class="fr">${fld("Subcategory",`<select name="sub" data-sub>${opt((CATS[cat]||["Other"]).map(s=>[s,s]),sub)}</select>`)}${fld("Merchant / store",`<input name="merchant" list="merchants" value="${esc(t.merchant||"")}" placeholder="e.g. Keells, Uber Eats">`)}</div><datalist id="merchants">${merchantList().map(m=>`<option value="${esc(m)}">`).join("")}</datalist><div data-vehwrap>${vehF(false)}</div>`};
+    <div class="fr">${fld("Subcategory",`<select name="sub" data-sub>${opt((CATS[cat]||["Other"]).map(s=>[s,s]),sub)}</select>`)}${fld("Merchant / store",`<input name="merchant" list="merchants" value="${esc(t.merchant||"")}" placeholder="e.g. Keells, PickMe, Uber Eats" autocomplete="off">`)}</div><p class="hint" data-cathint style="margin-top:-6px"></p><datalist id="merchants">${merchantList().map(m=>`<option value="${esc(m)}">`).join("")}</datalist><div data-vehwrap>${vehF(false)}</div>`};
   let body="",title=(isEdit?"Edit ":"")+TYPE_LABEL[type];
   if(type==="expense"||type==="cc_purchase"){
     if(type==="cc_purchase"&&!S.cards.length)return openSheet(title,`<p class="info">Add a credit card first.</p><div class="actions"><button class="btn primary" data-act="edit-card">Add card</button></div>`);
@@ -824,7 +898,7 @@ function txForm(type,t,preset){preset=preset||{};t=t||{};const isEdit=!!t.id;con
     ${fld("Refunded to",`<select name="dest">${opt([...S.accounts.map(a=>["a:"+a.id,acctLabel(a)]),...S.cards.map(c=>["c:"+c.id,c.name])],t.card?"c:"+t.card:t.acct?"a:"+t.acct:"")}</select>`)}${notesF}
     <p class="info">A refund reduces spending in its category.</p>`;
   }
-  const html=`<form class="f" data-form="tx" data-type="${type}" data-id="${t.id||""}">${body}<div class="actions">${isEdit?`<button type="button" class="btn danger" data-act="del-tx" data-id="${t.id}">Delete</button>`:""}<button type="button" class="btn" data-act="close">Cancel</button><button class="btn primary" type="submit">${isEdit?"Save changes":"Save"}</button></div></form>`;
+  const html=`<form class="f" data-form="tx" data-type="${type}" data-id="${t.id||""}">${preset.fromShare?`<p class="info" role="status">Filled in from what you shared. Check the details, then save.</p>`:""}${body}<div class="actions">${isEdit?`<button type="button" class="btn danger" data-act="del-tx" data-id="${t.id}">Delete</button>`:""}<button type="button" class="btn" data-act="close">Cancel</button><button class="btn primary" type="submit">${isEdit?"Save changes":"Save"}</button></div></form>`;
   openSheet(title,html,root=>mountTxForm(root,type,t));
 }
 function mountTxForm(root,type,t){
@@ -836,7 +910,11 @@ function mountTxForm(root,type,t){
       if(c==="Fuel"){const amt=root.querySelector("input[name=amount]").value;closeSheet();txForm("fuel",{amount:amt||undefined,card:type==="cc_purchase"?root.querySelector("[name=card]").value:undefined,method:type==="cc_purchase"?"Credit Card":undefined});return}
       hid.value=c;cc.querySelectorAll(".chip").forEach(x=>x.setAttribute("aria-pressed",x===b));sub.innerHTML=opt((CATS[c]||["Other"]).map(s=>[s,s]),"");upd()});
     if(vw){vw.hidden=!(hid.value==="Vehicle"||t.vehicle);const vs=vw.querySelector("select");if(vs&&hid.value==="Vehicle"){vs.required=true;if(!vs.value&&S.vehicles[0])vs.value=S.vehicles[0].id}}
-    // show vehicle picker for any category if user wants: toggled by category Vehicle; also keep visible when set
+    const setCat=(c,sv)=>{hid.value=c;cc.querySelectorAll(".chip").forEach(x=>x.setAttribute("aria-pressed",x.dataset.cat===c));sub.innerHTML=opt((CATS[c]||["Other"]).map(v=>[v,v]),sv||"");upd()};
+    const mi=root.querySelector("[name=merchant]"),hint=root.querySelector("[data-cathint]");let manual=!!t.id;
+    cc.addEventListener("click",e=>{if(e.target.closest("[data-cat]")){manual=true;if(hint)hint.textContent=""}},true);sub.addEventListener("change",()=>{manual=true});
+    if(mi){const apply=()=>{if(manual)return;const r=suggestCat(mi.value);if(!r||!CATS[r.cat]){if(hint)hint.textContent="";return}setCat(r.cat,r.sub);if(hint)hint.textContent=r.learned?`Category from your earlier ${r.name} entries`:`Category set for ${r.name||mi.value.trim()}. Tap another category to change it.`};
+      mi.addEventListener("input",apply);mi.addEventListener("change",apply);if(!t.id&&mi.value&&!t.cat)apply()}
   }
   const ic=root.querySelector("[data-incchips]");
   if(ic){const hid=root.querySelector("input[name=sub]"),sw=root.querySelector("[data-salwrap]");ic.addEventListener("click",e=>{const b=e.target.closest("[data-inc]");if(!b)return;hid.value=b.dataset.inc;ic.querySelectorAll(".chip").forEach(x=>x.setAttribute("aria-pressed",x===b));sw.hidden=hid.value!=="Salary"});
@@ -920,7 +998,7 @@ function accountForm(a){a=a||{};const isEdit=!!a.id;const cur=isEdit?acctBal(a.i
   openSheet(isEdit?"Edit account":"Add bank account",`<form class="f" data-form="account" data-id="${a.id||""}">
   <div class="fr">${fld("Bank name",`<input name="bank" value="${esc(a.bank||"")}" placeholder="e.g. Commercial Bank" list="banks">`)}${fld("Account name",`<input name="name" required value="${esc(a.name||"")}" placeholder="e.g. Salary Account" autofocus>`)}</div>
   <datalist id="banks">${["Commercial Bank","Sampath Bank","HNB","Bank of Ceylon","People's Bank","NSB","Seylan Bank","NDB","DFCC Bank","Nations Trust Bank","Pan Asia Bank","Union Bank","Amana Bank","Cargills Bank"].map(b=>`<option value="${b}">`).join("")}</datalist>
-  <div class="fr">${fld("Account type",`<select name="type">${opt(ACCT_TYPES.map(x=>[x,x]),a.type||"Salary")}</select>`)}${fld("Account number nickname",`<input name="nick" value="${esc(a.nick||"")}" placeholder="e.g. ending 4521">`)}</div>
+  <div class="fr">${fld("Account type",`<select name="type">${opt(ACCT_TYPES.map(x=>[x,x]),a.type||"Salary")}</select>`)}${fld("Account nickname, with last 4 digits",`<input name="nick" value="${esc(a.nick||"")}" placeholder="e.g. ending 4521">`)}</div>
   <div class="fr">${fld("Opening balance",`<input type="number" step="any" name="opening" value="${a.opening??0}">`)}${fld("Currency",`<select name="currency">${opt(["LKR","USD","EUR","GBP","AUD","AED","INR"].map(c=>[c,c]),a.currency||"LKR")}</select>`)}</div>
   ${isEdit?fld("Current balance",`<input type="number" step="any" name="current" value="${Math.round(cur*100)/100}">`)+`<p class="hint">Calculated from the opening balance and every transaction. If it doesn't match your bank, type the real balance and Kasi adjusts the opening balance to match.</p>`:""}
   <div class="actions">${isEdit&&a.id!=="cash"?`<button type="button" class="btn danger" data-act="del-account" data-id="${a.id}">Delete</button>`:""}<button type="button" class="btn" data-act="close">Cancel</button><button class="btn primary">${isEdit?"Save changes":"Add account"}</button></div></form>`)}
@@ -930,7 +1008,8 @@ function cardForm(c){c=c||{};const isEdit=!!c.id;const cur=isEdit?cardOut(c.id):
   <div class="fr">${fld("Credit limit",`<input type="number" step="any" min="0" name="limit" value="${c.limit||""}">`)}${fld(isEdit?"Current outstanding":"Outstanding today",`<input type="number" step="any" name="${isEdit?"current":"opening"}" value="${isEdit?Math.round(cur*100)/100:(c.opening||0)}">`)}</div>
   <div class="fr">${fld("Statement date (day of month)",`<input type="number" min="1" max="31" name="stmtDay" required value="${c.stmtDay||""}">`)}${fld("Payment due date (day of month)",`<input type="number" min="1" max="31" name="dueDay" required value="${c.dueDay||""}">`)}</div>
   <div class="fr">${fld("Minimum payment (% of statement)",`<input type="number" step="any" min="0" max="100" name="minPct" value="${c.minPct??5}">`)}${fld("Minimum payment floor (Rs.)",`<input type="number" step="any" min="0" name="minFixed" value="${c.minFixed??1000}">`)}</div>
-  <p class="hint">Statement balance, amount due, available credit and status are calculated from your purchases and payments.</p>
+  ${fld("Last 4 digits of the card (optional)",`<input name="last4" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" value="${esc(c.last4||"")}" placeholder="e.g. 4417">`)}
+  <p class="hint">The last 4 digits let Kasi recognise this card in bank SMS you share. Statement balance, amount due, available credit and status are calculated from your purchases and payments.</p>
   <div class="actions">${isEdit?`<button type="button" class="btn danger" data-act="del-card" data-id="${c.id}">Delete</button>`:""}<button type="button" class="btn" data-act="close">Cancel</button><button class="btn primary">${isEdit?"Save changes":"Add card"}</button></div></form>`)}
 function vehicleForm(v){v=v||{};const isEdit=!!v.id;
   openSheet(isEdit?"Edit vehicle":"Add vehicle",`<form class="f" data-form="vehicle" data-id="${v.id||""}">
@@ -953,7 +1032,7 @@ function submitEntity(form){const kind=form.dataset.form,id=form.dataset.id;cons
   if(kind==="account"){const a=id?acct(id):{id:uid()};Object.assign(a,{bank:g("bank"),name:g("name"),type:g("type"),nick:g("nick"),currency:g("currency")||"LKR",opening:+g("opening")||0});
     if(id&&fd.has("current")){const cur=+g("current")||0;const calc=acctBal(id);if(Math.abs(cur-calc)>0.004){a.opening=Math.round((a.opening+(cur-calc))*100)/100}}
     if(!id)S.accounts.push(a);}
-  else if(kind==="card"){const c=id?card(id):{id:uid(),opening:+g("opening")||0};Object.assign(c,{name:g("name"),bank:g("bank"),limit:+g("limit")||0,stmtDay:+g("stmtDay")||1,dueDay:+g("dueDay")||1,minPct:+g("minPct")||5,minFixed:+g("minFixed")||0});
+  else if(kind==="card"){const c=id?card(id):{id:uid(),opening:+g("opening")||0};Object.assign(c,{name:g("name"),bank:g("bank"),limit:+g("limit")||0,stmtDay:+g("stmtDay")||1,dueDay:+g("dueDay")||1,minPct:+g("minPct")||5,minFixed:+g("minFixed")||0,last4:g("last4").replace(/\D/g,"").slice(-4)});
     if(id&&fd.has("current")){const cur=+g("current")||0;const calc=cardOut(id);if(Math.abs(cur-calc)>0.004)c.opening=Math.round(((+c.opening||0)+(cur-calc))*100)/100}if(!id)S.cards.push(c)}
   else if(kind==="vehicle"){const v=id?veh(id):{id:uid()};Object.assign(v,{name:g("name"),reg:g("reg"),make:g("make"),model:g("model"),year:+g("year")||"",fuel:g("fuel"),odometer:+g("odometer")||0});if(!id)S.vehicles.push(v)}
   else if(kind==="stock"){const st=stock(id);if(st)Object.assign(st,{symbol:g("symbol").toUpperCase(),name:g("sname"),sector:g("sector"),notes:g("notes")})}
@@ -993,6 +1072,7 @@ document.addEventListener("click",async e=>{
     case "edit-stock":{const st=stock(ds.id);closeSheet();if(st)stockForm(st);break}
     case "prices":closeSheet();pricesForm();break;
     case "del-stock":{const n=L().all.filter(t=>t.stockId===ds.id).length;if(n){toast(`This company has ${n} transaction${n===1?"":"s"}. Delete those first.`);break}if(confirm("Delete this company?")){S.stocks=S.stocks.filter(x=>x.id!==ds.id);saveState();invalidate();closeSheet();render()}break}
+    case "paste":closeSheet();pasteSheet();break;
     case "asset":{const a=asset(ds.id);if(a)assetDetail(a);break}
     case "edit-asset":closeSheet();assetForm(ds.id?asset(ds.id):null);break;
     case "value-asset":{const a=asset(ds.id);closeSheet();if(a)valueForm(a);break}
@@ -1012,6 +1092,7 @@ document.addEventListener("click",async e=>{
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&$("#modal").innerHTML)closeSheet();if(e.key==="Enter"&&e.target.matches(".row.click")){e.target.click()}});
 document.addEventListener("submit",e=>{const f=e.target;if(!f.dataset.form)return;e.preventDefault();const k=f.dataset.form;
   if(k==="tx")submitTx(f);
+  else if(k==="paste"){openFromText(new FormData(f).get("text"))}
   else if(["account","card","vehicle","bill","asset","assetval","stock","prices"].includes(k))submitEntity(f);
   else if(k==="salset"){const fd=new FormData(f);S.settings.salaryDay=Math.min(31,Math.max(1,+fd.get("salaryDay")||25));S.settings.expectedSalary=+fd.get("expectedSalary")||0;S.settings.plannedSavings=+fd.get("plannedSavings")||0;saveState();render();toast("Planner updated")}
   else if(k==="settings"){const fd=new FormData(f);S.settings.dueSoon=+fd.get("dueSoon")||5;S.settings.theme=fd.get("theme");applyTheme();saveState();render();toast("Settings saved")}
@@ -1038,7 +1119,7 @@ function loadDemo(){let seed=7;const rnd=()=>{seed=(seed*16807)%2147483647;retur
   for(const m of S.months)Store.put("tx-"+m,null);
   S=freshState();const A=(id,bank,name,type,opening,nick)=>({id,bank,name,type,opening,nick,currency:"LKR"});
   S.accounts=[A("sal","Commercial Bank","Salary Account","Salary",62000,"ending 4521"),A("sav","Sampath Bank","Savings Account","Savings",240000,"ending 0917"),A("cur","HNB","Current Account","Current",35000,"ending 2230"),A("cash","","Cash in hand","Cash",6500,"")];
-  S.cards=[{id:"visa",name:"Commercial Bank Visa",bank:"Commercial Bank",limit:300000,opening:0,stmtDay:5,dueDay:25,minPct:5,minFixed:1000},{id:"mc",name:"Sampath Mastercard",bank:"Sampath Bank",limit:200000,opening:0,stmtDay:20,dueDay:10,minPct:5,minFixed:1000}];
+  S.cards=[{id:"visa",name:"Commercial Bank Visa",bank:"Commercial Bank",limit:300000,opening:0,stmtDay:5,dueDay:25,minPct:5,minFixed:1000,last4:"4417"},{id:"mc",name:"Sampath Mastercard",bank:"Sampath Bank",limit:200000,opening:0,stmtDay:20,dueDay:10,minPct:5,minFixed:1000,last4:"8823"}];
   S.vehicles=[{id:"aqua",name:"Toyota Aqua",reg:"CAB-1234",make:"Toyota",model:"Aqua",year:2015,fuel:"Hybrid (petrol)",odometer:84200},{id:"vezel",name:"Honda Vezel",reg:"CBK-5678",make:"Honda",model:"Vezel",year:2017,fuel:"Petrol",odometer:61800}];
   const start=addMonths(today(),-3,1);
   const B=(id,name,category,provider,amount,day,pay,veh,freq)=>({id,name,category,provider,amount,firstDue:ymd(onDay(parse(start).getFullYear(),parse(start).getMonth(),day)),freq:freq||"Monthly",payAcct:pay.startsWith("c:")?"":pay,payCard:pay.startsWith("c:")?pay.slice(2):"",vehicle:veh||"",ref:"",active:true});
@@ -1051,7 +1132,7 @@ function loadDemo(){let seed=7;const rnd=()=>{seed=(seed*16807)%2147483647;retur
     {id:"gold",name:"Gold jewellery",category:"Gold & jewellery",initCost:850000,initDate:"2021-03-10",yearly:10,vehicle:"",values:[{date:addMonths(today(),-2,1),value:1650000,note:"Jeweller's quote"}],notes:""},
     {id:"aquaA",name:"Toyota Aqua",category:"Vehicle",initCost:5800000,initDate:"2021-08-01",yearly:-8,vehicle:"aqua",values:[],notes:""},
     {id:"mac",name:"MacBook Air",category:"Electronics",initCost:0,initDate:"",yearly:-20,vehicle:"",values:[],notes:""}];
-  S.budgets={Groceries:55000,Food:35000,Fuel:55000,Vehicle:15000,Shopping:20000,Entertainment:10000,Bills:40000,Family:15000,Medical:10000,Other:10000};
+  S.budgets={Groceries:55000,Food:35000,Transport:12000,Fuel:55000,Vehicle:15000,Shopping:20000,Entertainment:10000,Bills:40000,Family:15000,Medical:10000,Other:10000};
   S.settings.expectedSalary=392000;S.settings.plannedSavings=50000;S.settings.salaryDay=25;
   TX={};const add=t=>{t.id=uid()+Math.floor(rnd()*1e6).toString(36);t.ts=Date.now()+Math.floor(rnd()*1e6);const m=mkey(t.date);(TX[m]=TX[m]||[]).push(t)};
   const t0=today();let odo={aqua:84200,vezel:61800};
@@ -1065,6 +1146,7 @@ function loadDemo(){let seed=7;const rnd=()=>{seed=(seed*16807)%2147483647;retur
     if(day%9===2){const l=+(22+rnd()*12).toFixed(2);odo.aqua+=R(380,520);add({type:"fuel",cat:"Fuel",vehicle:"aqua",date:d,litres:l,ppl:299,amount:Math.round(l*299),fuelType:"Petrol 92",merchant:pick(["Ceypetco Borella","IOC Rajagiriya","Sinopec Nugegoda"]),odo:odo.aqua,method:"Credit Card",card:"visa"})}
     if(day%11===5){const l=+(28+rnd()*14).toFixed(2);odo.vezel+=R(300,460);add({type:"fuel",cat:"Fuel",vehicle:"vezel",date:d,litres:l,ppl:299,amount:Math.round(l*299),fuelType:"Petrol 92",merchant:pick(["Ceypetco Borella","IOC Rajagiriya"]),odo:odo.vezel,method:"Debit Card",acct:"sal"})}
     if(rnd()<.12)add({type:"expense",cat:"Vehicle",sub:pick(["Parking","Highway toll","Washing"]),vehicle:pick(["aqua","vezel"]),merchant:pick(["Southern Expressway","One Galle Face parking","Auto Miraj"]),date:d,amount:R(300,1800),method:"Cash",acct:"cash"});
+    if(rnd()<.16){const ub=rnd()<.5;add({type:"cc_purchase",cat:"Transport",sub:"Taxi",merchant:ub?"Uber":"PickMe",date:d,amount:R(450,2400),method:"Credit Card",card:"mc"})}
     if(rnd()<.06)add({type:rnd()<.5?"cc_purchase":"expense",cat:pick(["Shopping","Entertainment","Medical","Family"]),sub:"Other",merchant:pick(["Odel","Daraz","Scope Cinemas","Healthguard Pharmacy","Softlogic"]),date:d,amount:R(2500,12000),method:"Credit Card",card:"mc"});
   }
   // fix card sources for random expenses
@@ -1095,45 +1177,71 @@ function loadFromDocs(docs){
 function overlayOutbox(docs){for(const [k,v] of Object.entries(Store.ob))if(!k.startsWith("rc-")){if(v.d===null)delete docs[k];else docs[k]=v.d}return docs}
 function showApp(){$("#auth").hidden=true;$(".app").hidden=false;$("#bottomnav").hidden=false}
 async function signedIn(email){
+  try{const me=await API.req("GET","/me");ME=me}catch(e){}
+  try{AUTH_CFG=await API.req("GET","/config")}catch(e){}
   Store.user=email;try{localStorage.setItem("kasi:lastUser",email)}catch(e){}
   Store.loadOb();await Store.flush();
   let docs;
   try{docs=await Store.getAll();Store.mode="cloud"}
   catch(e){if(e.code==="offline"||e.status>=500){docs=Store.readSnap()||{};Store.docs=JSON.parse(JSON.stringify(docs));Store.mode="offline"}else throw e}
   loadFromDocs(overlayOutbox(docs));showApp();render();renderStatus();
-  if(new URLSearchParams(location.search).has("add")){history.replaceState(null,"","/");chooser()}
+  handleLaunchParams();
 }
 function onSignedOut(msg){
   closeSheet();const u=Store.user;Store.user=null;S=null;TX={};invalidate();
   renderAuth("login",msg||"Your session ended. Sign in again to continue.",u);
 }
-let AUTH_CFG=null;
+let AUTH_CFG=null;let ME={hasRecovery:true};
 async function renderAuth(mode,msg,email){
   $(".app").hidden=true;$("#bottomnav").hidden=true;const box=$("#auth");box.hidden=false;
-  if(!AUTH_CFG){try{AUTH_CFG=await API.req("GET","/config")}catch(e){AUTH_CFG={signupOpen:true,codeRequired:false,firstUser:false,err:e.message}}}
+  if(!AUTH_CFG){try{AUTH_CFG=await API.req("GET","/config")}catch(e){AUTH_CFG={signupOpen:true,codeRequired:false,firstUser:false}}}
   if(AUTH_CFG.firstUser&&mode==="login")mode="signup";
-  const isUp=mode==="signup";
+  const isUp=mode==="signup",isRec=mode==="recover";
+  const title=isRec?"Reset your password":isUp?(AUTH_CFG.firstUser?"Create your account":"Create your account"):"Sign in";
+  const lead=isRec?"Enter your email and the recovery key you saved when you created your account."
+    :isUp?(AUTH_CFG.firstUser?"You're the first person here, so this account becomes the owner."
+      :AUTH_CFG.codeRequired?"Ask the person who shared Kasi with you for the sign-up code.":"Track your salary, accounts, cards and bills in your own private space.")
+    :"Your salary, accounts and cards, in one private place.";
   box.innerHTML=`<div class="auth-card">
     <div class="brand"><b>Kasi</b><span>salary to salary</span></div>
-    <h1>${isUp?(AUTH_CFG.firstUser?"Create your account":"Create an account"):"Sign in"}</h1>
-    <p class="muted">${isUp?(AUTH_CFG.firstUser?"You're the first person here, so this account becomes the owner. After this, new accounts need a sign-up code.":"Ask the owner of this Kasi for the sign-up code."):"Your salary, accounts and cards, in one private place."}</p>
+    <h1>${title}</h1><p class="muted">${lead}</p>
     ${msg?`<p class="info" role="status">${esc(msg)}</p>`:""}
     <form class="f" data-form="auth" data-mode="${mode}">
-      ${fld("Email",`<input type="email" name="email" required autocomplete="email" inputmode="email" value="${esc(email||"")}" autofocus>`)}
-      ${fld("Password",`<input type="password" name="password" required minlength="${isUp?10:1}" autocomplete="${isUp?"new-password":"current-password"}">`)}
-      ${isUp?`<p class="hint">At least 10 characters. A short phrase is easiest to remember.</p>`:""}
+      ${fld("Email",`<input type="email" name="email" required autocomplete="email" inputmode="email" value="${esc(email||"")}" ${email?"":"autofocus"}>`)}
+      ${isRec?fld("Recovery key",`<input name="key" required autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXXX-XXXXX-XXXXX-XXXXX">`):""}
+      ${fld(isRec?"New password":"Password",`<input type="password" name="password" required minlength="${isUp||isRec?10:1}" autocomplete="${isUp||isRec?"new-password":"current-password"}" ${email&&!isRec?"autofocus":""}>`)}
+      ${isUp||isRec?`<p class="hint">At least 10 characters. A short phrase is easiest to remember.</p>`:""}
       ${isUp&&AUTH_CFG.codeRequired?fld("Sign-up code",`<input name="code" required autocomplete="off">`):""}
-      <button class="btn primary" type="submit" style="padding:12px">${isUp?"Create account":"Sign in"}</button>
+      <button class="btn primary" type="submit" style="padding:12px">${isRec?"Set new password":isUp?"Create account":"Sign in"}</button>
     </form>
-    ${isUp?(AUTH_CFG.firstUser?"":`<p class="small" style="margin-top:14px">Already have an account? <a href="#" data-auth="login">Sign in</a></p>`):(AUTH_CFG.signupOpen?`<p class="small" style="margin-top:14px">New here? <a href="#" data-auth="signup">Create an account</a></p>`:"")}
+    ${isUp&&!AUTH_CFG.firstUser?`<p class="hint">Your data is private to your account; other people using this Kasi can't see it. The person who runs this Kasi site manages its database.</p>`:""}
+    <div class="small" style="display:grid;gap:6px">
+      ${mode==="login"?`<a href="#" data-auth="recover">Forgot your password?</a>`:""}
+      ${mode!=="login"&&!AUTH_CFG.firstUser?`<span>Already have an account? <a href="#" data-auth="login">Sign in</a></span>`:""}
+      ${mode==="login"&&AUTH_CFG.signupOpen?`<span>New here? <a href="#" data-auth="signup">Create an account</a></span>`:""}
+    </div>
   </div>`;
-  const f=box.querySelector("input[autofocus]");if(f&&!email)setTimeout(()=>f.focus(),30);else{const p=box.querySelector("input[name=password]");if(p)setTimeout(()=>p.focus(),30)}
+}
+function showRecoveryKey(key,why){
+  const lead=why==="recover"?"Your password has been changed and your old recovery key no longer works. Here is your new one."
+    :why==="signup"?"If you ever forget your password, this key lets you set a new one."
+    :"Your previous recovery key no longer works. Use this one instead.";
+  openSheet("Save your recovery key",`<p>${lead}</p>
+    <p style="font:700 1.35rem var(--display);letter-spacing:.06em;text-align:center;background:var(--surface-2);border-radius:12px;padding:16px 10px;margin:14px 0;word-break:break-all;user-select:all" data-key>${esc(key)}</p>
+    <p class="muted small">Keep it somewhere safe, like your password manager or written down at home. Kasi can't show it to you again, and nobody, including the site owner, can reset your password without it.</p>
+    <div class="actions" style="justify-content:flex-start;margin-top:10px"><button class="btn" data-act="copy-key" data-key="${esc(key)}">Copy</button><button class="btn" data-act="save-key" data-key="${esc(key)}">Save as a file</button></div>
+    <label class="chk" style="margin-top:14px"><input type="checkbox" data-keysaved> I've saved my recovery key</label>
+    <div class="actions"><button class="btn primary" data-act="close" data-keydone disabled>Done</button></div>`,
+    root=>{const c=root.querySelector("[data-keysaved]"),d=root.querySelector("[data-keydone]");c.addEventListener("change",()=>{d.disabled=!c.checked})});
+  ME.hasRecovery=true;
 }
 document.addEventListener("click",e=>{const a=e.target.closest("[data-auth]");if(a){e.preventDefault();renderAuth(a.dataset.auth)}});
 document.addEventListener("submit",async e=>{const f=e.target;const k=f.dataset&&f.dataset.form;
   if(k==="auth"){e.preventDefault();const fd=new FormData(f);const btn=f.querySelector("button[type=submit]");btn.disabled=true;const label=btn.textContent;btn.textContent="Please wait…";
-    try{const r=await API.req("POST","/"+f.dataset.mode,{email:fd.get("email"),password:fd.get("password"),code:fd.get("code")||undefined});AUTH_CFG=null;await signedIn(r.email)}
+    try{const mode=f.dataset.mode;const body=mode==="recover"?{email:fd.get("email"),key:fd.get("key"),password:fd.get("password")}:{email:fd.get("email"),password:fd.get("password"),code:fd.get("code")||undefined};
+      const r=await API.req("POST","/"+mode,body);AUTH_CFG=null;await signedIn(r.email);if(r.recoveryKey)showRecoveryKey(r.recoveryKey,mode)}
     catch(x){btn.disabled=false;btn.textContent=label;let p=f.parentNode.querySelector(".info");if(!p){p=document.createElement("p");p.className="info";p.setAttribute("role","alert");f.parentNode.insertBefore(p,f)}p.textContent=x.code==="offline"?"You're offline. Connect to the internet to sign in.":x.message}}
+  else if(k==="newkey"){e.preventDefault();const fd=new FormData(f);try{const r=await API.req("POST","/recovery-key",{password:fd.get("password")});closeSheet();showRecoveryKey(r.recoveryKey,"new");if(UI.view==="settings"||UI.view==="dashboard")render()}catch(x){toast(x.code==="offline"?"Connect to the internet to do this.":x.message)}}
   else if(k==="chpw"){e.preventDefault();const fd=new FormData(f);if(fd.get("next")!==fd.get("next2")){toast("The new passwords don't match.");return}
     try{await API.req("POST","/password",{current:fd.get("current"),next:fd.get("next")});closeSheet();toast("Password changed. Other devices have been signed out.")}catch(x){toast(x.message)}}
   else if(k==="delacct"){e.preventDefault();const fd=new FormData(f);
@@ -1142,6 +1250,11 @@ document.addEventListener("submit",async e=>{const f=e.target;const k=f.dataset&
 document.addEventListener("click",async e=>{const el=e.target.closest("[data-act]");if(!el)return;const a=el.dataset.act;
   if(a==="logout"){if(Store.pending()&&!confirm("Some changes haven't synced yet and will be lost if you sign out. Sign out anyway?"))return;
     try{await API.req("POST","/logout")}catch(x){}Store.clearLocal();try{localStorage.removeItem("kasi:lastUser")}catch(_){}const u=Store.user;Store.user=null;S=null;TX={};invalidate();renderAuth("login","You've signed out.",u)}
+  else if(a==="newkey")openSheet("New recovery key",`<form class="f" data-form="newkey"><p class="muted">This replaces your current recovery key. Enter your password to continue.</p>${fld("Password",`<input type="password" name="password" required autocomplete="current-password" autofocus>`)}<div class="actions"><button type="button" class="btn" data-act="close">Cancel</button><button class="btn primary">Create key</button></div></form>`);
+  else if(a==="copy-key"){try{await navigator.clipboard.writeText(el.dataset.key);toast("Recovery key copied")}catch(x){toast("Couldn't copy. Select the key and copy it instead.")}}
+  else if(a==="save-key"){saveFile("kasi-recovery-key.txt",`Kasi recovery key for ${Store.user||""}\n\n${el.dataset.key}\n\nUse it on the sign-in screen under "Forgot your password?". Each key works once.\nSite: ${location.origin}\n`,"text/plain")}
+  else if(a==="share-app"){const data={title:"Kasi",text:"I use Kasi to track my salary, bills and spending. Create your own private account here:",url:location.origin};
+    try{if(navigator.share){await navigator.share(data)}else{await navigator.clipboard.writeText(location.origin);toast("Link copied")}}catch(x){if(x&&x.name!=="AbortError"){try{await navigator.clipboard.writeText(location.origin);toast("Link copied")}catch(_){}}}}
   else if(a==="chpw")openSheet("Change password",`<form class="f" data-form="chpw">${fld("Current password",`<input type="password" name="current" required autocomplete="current-password" autofocus>`)}${fld("New password",`<input type="password" name="next" required minlength="10" autocomplete="new-password">`)}${fld("Repeat new password",`<input type="password" name="next2" required minlength="10" autocomplete="new-password">`)}<p class="hint">You'll stay signed in here. Other devices will need to sign in again.</p><div class="actions"><button type="button" class="btn" data-act="close">Cancel</button><button class="btn primary">Change password</button></div></form>`);
   else if(a==="delacct")openSheet("Delete account",`<form class="f" data-form="delacct"><p>This permanently deletes your account and every account, card, bill, vehicle, transaction and receipt in it. Download a backup first if you might need it.</p>${fld("Enter your password to confirm",`<input type="password" name="password" required autocomplete="current-password" autofocus>`)}<div class="actions"><button type="button" class="btn" data-act="close">Cancel</button><button class="btn danger">Delete my account</button></div></form>`);
   else if(a==="install"&&window._installPrompt){window._installPrompt.prompt();try{await window._installPrompt.userChoice}catch(x){}window._installPrompt=null;if(UI.view==="settings")render()}
@@ -1159,7 +1272,7 @@ const isIOS=()=>/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platfo
     if(e.code==="no_db"){$("#auth").hidden=false;$(".app").hidden=true;$("#auth").innerHTML=`<div class="auth-card"><div class="brand"><b>Kasi</b></div><h1>Almost there</h1><p class="muted">The app is online, but its database isn't connected yet. In Vercel, open your project's <b>Storage</b> tab, create a <b>Neon</b> database and connect it to this project, then redeploy.</p></div>`;return}
     if(e.code==="offline"||e.status>=500){
       let last=null;try{last=localStorage.getItem("kasi:lastUser")}catch(_){}
-      if(last){Store.user=last;Store.loadOb();const snap=Store.readSnap();if(snap){Store.docs=JSON.parse(JSON.stringify(snap));Store.mode="offline";loadFromDocs(overlayOutbox(snap));showApp();render();renderStatus();return}}
+      if(last){Store.user=last;Store.loadOb();const snap=Store.readSnap();if(snap){Store.docs=JSON.parse(JSON.stringify(snap));Store.mode="offline";loadFromDocs(overlayOutbox(snap));showApp();render();renderStatus();handleLaunchParams();return}}
       $("#auth").hidden=false;$(".app").hidden=true;$("#auth").innerHTML=`<div class="auth-card"><div class="brand"><b>Kasi</b></div><h1>You're offline</h1><p class="muted">Connect to the internet and open Kasi again to sign in.</p></div>`;return}
     if(e.code==="auth"){renderAuth("login");return}
     $("#auth").hidden=false;$("#auth").innerHTML=`<div class="auth-card"><h1>Kasi couldn't start</h1><p class="muted">${esc(e.message)}</p></div>`;return}

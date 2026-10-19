@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "app.vercel.kasi_9uif_jok8coagf_hiranga.twa",
+        "sha256_cert_fingerprints": ["5B:C5:04:73:74:65:9A:7F:1D:E6:0C:7B:CB:4B:61:05:2E:51:F5:EE:04:66:7A:35:83:33:5E:76:9F:F2:A9:7C"]
+      }
+    }]

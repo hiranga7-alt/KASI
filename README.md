@@ -53,14 +53,21 @@ Open your site, for example `https://kasi-yourname.vercel.app`. The first accoun
 
 Kasi then opens full screen with its own icon and works offline. Changes you make offline sync when you're back online.
 
-## Let family members sign up (optional)
+## Letting other people create accounts
 
-1. In Vercel, go to **Settings → Environment Variables**.
-2. Add `SIGNUP_CODE` with a code of your choice and save.
-3. Redeploy.
-4. Share the code with your family.
+By default only the first account (the owner) can be created. Choose one of these in Vercel under **Settings → Environment Variables**, then **Redeploy**:
 
-Each person gets their own private ledger.
+| Setting | Who can create an account |
+|---|---|
+| `OPEN_SIGNUP` = `true` | Anyone who has your link |
+| `SIGNUP_CODE` = a code you choose | Only people you give the code to |
+| Neither | Nobody new (closed) |
+
+Each person gets their own private data, which nobody else can see through the app. To stop spam, one internet connection can create at most 5 accounts an hour.
+
+Everyone gets a **recovery key** when they sign up. If they forget their password, they use **Forgot your password?** on the sign-in screen with their email and that key. Each key works once, and a new one is shown after use. People can also create a new key any time in **Settings → Recovery key**. Kasi doesn't send emails, so a lost password *and* a lost key means that account can't be recovered.
+
+Tell the people you invite that you, as the owner, manage the database. Anyone with access to your Vercel or Neon account could read the raw data, so keep those accounts protected with two-factor sign-in.
 
 ## Updating Kasi
 
@@ -72,7 +79,7 @@ In Vercel, go to **Settings → Domains** and add a domain you own, for example 
 
 ## Good to know
 
-- **Cost:** Vercel Hobby is free for personal, non-commercial use. Neon's free plan includes about 0.5 GB of storage at the time of writing. That's years of transactions; receipt photos use the most space, at roughly 150 KB each.
+- **Cost:** Vercel Hobby is free for personal, non-commercial use, which includes sharing Kasi free with family and friends. If you start charging, move to Vercel Pro. Neon's free plan includes about 0.5 GB of storage at the time of writing. That's years of transactions; receipt photos use the most space, at roughly 150 KB each.
 - **First load after a quiet period:** Neon's free database sleeps when unused, so the first request after a long idle period can take a second or two longer.
 - **Backups:** each person can use **Settings → Download backup** in the app. For the whole database, Neon's console (Vercel **Storage**, then **Open in Neon**) has branching and point-in-time restore.
 

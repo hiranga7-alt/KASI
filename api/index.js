@@ -41,6 +41,8 @@ function ensureSchema() {
       await q(`CREATE TABLE IF NOT EXISTS sessions (
         token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires_at BIGINT NOT NULL, created_at BIGINT NOT NULL)`);
       await q(`CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)`);
+      await q(`ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_hash TEXT`);
+      await q(`CREATE TABLE IF NOT EXISTS signup_log (ip TEXT NOT NULL, at BIGINT NOT NULL)`);
       await q(`CREATE TABLE IF NOT EXISTS docs (
         user_id TEXT NOT NULL, name TEXT NOT NULL, data TEXT NOT NULL, updated_at BIGINT NOT NULL,
         PRIMARY KEY (user_id, name))`);
@@ -121,6 +123,25 @@ async function currentUser(req) {
   return row;
 }
 
+const OPEN_SIGNUP = () => /^(1|true|yes|on)$/i.test(String(process.env.OPEN_SIGNUP || ""));
+const SIGNUPS_PER_HOUR = 5;
+const KEY_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"; // no 0/O or 1/I/L to avoid mix-ups
+function newRecoveryKey() {
+  const bytes = crypto.getRandomValues(new Uint8Array(20));
+  const chars = [...bytes].map((b) => KEY_ALPHABET[b % 32]).join("");
+  return chars.match(/.{5}/g).join("-");
+}
+const normKey = (k) => String(k || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+const keyHash = (k) => sha256("kasi-recovery:" + normKey(k));
+function clientIp(req) {
+  return (req.headers.get("x-real-ip") || (req.headers.get("x-forwarded-for") || "").split(",")[0] || "unknown").trim();
+}
+async function setRecoveryKey(userId) {
+  const key = newRecoveryKey();
+  await q("UPDATE users SET recovery_hash = $1 WHERE id = $2", [await keyHash(key), userId]);
+  return key;
+}
+
 function routePath(request) {
   const url = new URL(request.url);
   if (url.pathname.startsWith("/api/") && url.pathname.length > 5) return decodeURIComponent(url.pathname.slice(5));
@@ -146,7 +167,7 @@ export async function handle(request) {
 
     if (path === "config" && method === "GET") {
       const n = await userCount();
-      return json({ firstUser: n === 0, signupOpen: n === 0 || !!process.env.SIGNUP_CODE, codeRequired: n > 0 });
+      return json({ firstUser: n === 0, signupOpen: n === 0 || OPEN_SIGNUP() || !!process.env.SIGNUP_CODE, codeRequired: n > 0 && !OPEN_SIGNUP() });
     }
 
     if (path === "signup" && method === "POST") {
@@ -154,7 +175,10 @@ export async function handle(request) {
       const email = String(b.email || "").trim().toLowerCase();
       if (!validEmail(email)) return fail(400, "email", "Enter a valid email address.");
       if (!validPassword(b.password)) return fail(400, "password", "Use a password of at least 10 characters.");
-      if ((await userCount()) > 0) {
+      const ip = clientIp(request), now0 = Date.now();
+      const recent = Number((await one("SELECT COUNT(*) AS n FROM signup_log WHERE ip = $1 AND at > $2", [ip, now0 - 3600000])).n);
+      if (recent >= SIGNUPS_PER_HOUR) return fail(429, "too_many", "Too many new accounts from this connection. Try again in an hour.");
+      if ((await userCount()) > 0 && !OPEN_SIGNUP()) {
         if (!process.env.SIGNUP_CODE) return fail(403, "closed", "New accounts are closed on this Kasi.");
         if (!safeEqual(String(b.code || ""), process.env.SIGNUP_CODE)) return fail(403, "bad_code", "That sign-up code isn't right.");
       }
@@ -164,8 +188,11 @@ export async function handle(request) {
       const { salt, hash } = await hashNew(b.password);
       await q("INSERT INTO users (id, email, pw_hash, salt, iter, created_at) VALUES ($1, $2, $3, $4, $5, $6)",
         [id, email, hash, salt, ITER, Date.now()]);
+      await q("INSERT INTO signup_log (ip, at) VALUES ($1, $2)", [ip, now0]);
+      await q("DELETE FROM signup_log WHERE at < $1", [now0 - 86400000]);
+      const recoveryKey = await setRecoveryKey(id);
       const token = await newSession(id);
-      return json({ email }, 201, { "Set-Cookie": cookie(token, SESSION_DAYS * 86400) });
+      return json({ email, recoveryKey }, 201, { "Set-Cookie": cookie(token, SESSION_DAYS * 86400) });
     }
 
     if (path === "login" && method === "POST") {
@@ -196,11 +223,50 @@ export async function handle(request) {
       return json({ email: user.email }, 200, { "Set-Cookie": cookie(token, SESSION_DAYS * 86400) });
     }
 
+    if (path === "recover" && method === "POST") {
+      const b = await readJson(request);
+      const email = String(b.email || "").trim().toLowerCase();
+      const u = await one("SELECT * FROM users WHERE email = $1", [email]);
+      const now = Date.now();
+      const given = await keyHash(b.key);
+      if (!u || !u.recovery_hash) return fail(400, "bad_recovery", "That email and recovery key don't match.");
+      if (Number(u.locked_until) > now) {
+        const mins = Math.ceil((Number(u.locked_until) - now) / 60000);
+        return fail(429, "locked", `Too many attempts. Try again in ${mins} minute${mins === 1 ? "" : "s"}.`);
+      }
+      if (!safeEqual(given, u.recovery_hash)) {
+        const failed = Number(u.failed) + 1;
+        const locked = failed >= MAX_FAILS ? now + LOCK_MINUTES * 60000 : 0;
+        await q("UPDATE users SET failed = $1, locked_until = $2 WHERE id = $3", [locked ? 0 : failed, locked, u.id]);
+        return locked ? fail(429, "locked", `Too many attempts. Try again in ${LOCK_MINUTES} minutes.`)
+                      : fail(400, "bad_recovery", "That email and recovery key don't match.");
+      }
+      if (!validPassword(b.password)) return fail(400, "password", "Use a new password of at least 10 characters.");
+      const { salt, hash } = await hashNew(b.password);
+      await tx([
+        ["UPDATE users SET pw_hash = $1, salt = $2, iter = $3, failed = 0, locked_until = 0 WHERE id = $4", [hash, salt, ITER, u.id]],
+        ["DELETE FROM sessions WHERE user_id = $1", [u.id]],
+      ]);
+      const recoveryKey = await setRecoveryKey(u.id); // each key works once
+      const token = await newSession(u.id);
+      return json({ email: u.email, recoveryKey }, 200, { "Set-Cookie": cookie(token, SESSION_DAYS * 86400) });
+    }
+
     const user = await currentUser(request);
     if (!user) return fail(401, "auth", "Please sign in.");
     const respond = (obj, status = 200) => json(obj, status, user.renewCookie ? { "Set-Cookie": user.renewCookie } : {});
 
-    if (path === "me" && method === "GET") return respond({ email: user.email });
+    if (path === "me" && method === "GET") {
+      const r = await one("SELECT recovery_hash FROM users WHERE id = $1", [user.id]);
+      return respond({ email: user.email, hasRecovery: !!(r && r.recovery_hash) });
+    }
+
+    if (path === "recovery-key" && method === "POST") {
+      const b = await readJson(request);
+      const full = await one("SELECT * FROM users WHERE id = $1", [user.id]);
+      if (!(await verifyPassword(full, String(b.password || "")))) return fail(403, "bad_password", "That password isn't right.");
+      return respond({ recoveryKey: await setRecoveryKey(user.id) });
+    }
 
     if (path === "logout" && method === "POST") {
       await q("DELETE FROM sessions WHERE token_hash = $1", [await sha256(readCookie(request, "kasi_s"))]);

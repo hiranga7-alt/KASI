@@ -1,4 +1,5 @@
 "use strict";
+const APP_VERSION="2026.10.28-pawning";
 
 /* ================= Constants ================= */
 const VIEWS=[["dashboard","Dashboard"],["salary","Salary & planner"],["transactions","Transactions"],["accounts","Bank Accounts"],["cards","Credit Cards"],["bills","Bills"],["food","Food & Groceries"],["vehicles","Vehicles"],["fuel","Fuel"],["budget","Budget"],["savings","Savings"],["assets","Assets"],["shares","Shares"],["pawning","Pawning"],["reports","Reports"],["settings","Settings"]];
@@ -334,7 +335,7 @@ function renderNav(){
   $("#bottomnav").innerHTML=b.map(([k,l,i])=>k==="add"?`<button class="plus" data-act="add" aria-label="Add transaction"><span class="circle">${svg(ICON.plus,26)}</span></button>`:`<button data-act="${k==="more"?"more":"nav"}" data-v="${k}" ${(UI.view===k||(k==="more"&&moreActive))?'aria-current="page"':""}>${svg(ICON[i])}<span>${l}</span></button>`).join("");
   renderStatus();
   let su=$("#sideUser");if(!su){su=document.createElement("div");su.id="sideUser";su.style.cssText="border-top:1px solid var(--line);margin-top:6px;padding:12px 12px 0;display:grid;gap:8px";$(".side").appendChild(su)}
-  su.innerHTML=Store.user?`<div class="small faint" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(Store.user)}">Signed in as<br><span style="color:var(--ink-2)">${esc(Store.user)}</span></div><button class="btn sm" data-act="logout" style="justify-self:start">Sign out</button>`:"";
+  su.innerHTML=Store.user?`<div class="small faint" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(Store.user)}">Signed in as<br><span style="color:var(--ink-2)">${esc(Store.user)}</span></div><button class="btn sm" data-act="logout" style="justify-self:start">Sign out</button><div class="faint" style="font-size:.72rem">Version ${APP_VERSION}</div>`:"";
 }
 function render(){renderNav();const v=$("#view");const fn=VIEW_FN[UI.view]||VIEW_FN.dashboard;v.innerHTML=fn();if(POST[UI.view])POST[UI.view]()}
 function go(v){UI.view=v;render();window.scrollTo(0,0)}
@@ -629,7 +630,7 @@ function vReports(){const k=UI.reportMonth;const [f,t]=monthRange(k);const T=tot
 
 /* ---------- Settings ---------- */
 function vSettings(){const n=L().all.length;
-  return`${head("Settings","")}
+  return`${head("Settings",`Kasi version ${APP_VERSION}`)}
   <div class="grid g2"><div class="panel"><h2 style="margin-bottom:10px">General</h2><form class="f" data-form="settings">
     <label class="fld"><span>Due soon means within (days)</span><input type="number" name="dueSoon" min="1" max="30" value="${S.settings.dueSoon||5}"></label>
     <label class="fld"><span>Appearance</span><select name="theme">${[["auto","Match my device"],["light","Light"],["dark","Dark"]].map(([v,l])=>`<option value="${v}" ${S.settings.theme===v?"selected":""}>${l}</option>`).join("")}</select></label>

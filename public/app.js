@@ -1,5 +1,5 @@
 "use strict";
-const APP_VERSION="2026.10.28-pawning";
+const APP_VERSION="2026.10.28-subscriptions";
 
 /* ================= Constants ================= */
 const VIEWS=[["dashboard","Dashboard"],["salary","Salary & planner"],["transactions","Transactions"],["accounts","Bank Accounts"],["cards","Credit Cards"],["bills","Bills"],["food","Food & Groceries"],["vehicles","Vehicles"],["fuel","Fuel"],["budget","Budget"],["savings","Savings"],["assets","Assets"],["shares","Shares"],["pawning","Pawning"],["reports","Reports"],["settings","Settings"]];
@@ -7,6 +7,7 @@ const CATS={
   Groceries:["Supermarket","Household items","Vegetables","Meat & fish","General groceries"],
   Food:["Restaurants","Takeaway","Coffee","Delivery","Lunch","Dinner","Snacks"],
   Transport:["Taxi","Tuk-tuk","Bus","Train","Flights","Other"],
+  Subscriptions:["Netflix","HBO Max","Amazon Prime","Apple","Google One","YouTube Premium","Spotify","Disney+","Microsoft 365","ChatGPT","Adobe","Canva","Other"],
   Vehicle:["Service","Repairs","Insurance","Revenue licence","Tyres","Battery","Parking","Highway toll","Washing","Accessories","Leasing/loan","Other"],
   Shopping:["Clothing","Electronics","Home","Online","Gifts","Other"],
   Entertainment:["Movies","Events","Travel","Hobbies","Other"],
@@ -19,7 +20,7 @@ const CATS={
   Other:["Other"]
 };
 const BILL_CATS=CATS.Bills;
-const BUDGET_CATS=["Groceries","Food","Transport","Fuel","Vehicle","Shopping","Entertainment","Bills","Family","Medical","Other"];
+const BUDGET_CATS=["Groceries","Food","Transport","Fuel","Vehicle","Shopping","Entertainment","Bills","Subscriptions","Family","Medical","Other"];
 const METHODS=["Cash","Bank Account","Debit Card","Credit Card","Bank Transfer","Digital Wallet"];
 const ACCT_TYPES=["Salary","Current","Savings","Fixed Deposit","Investment","Cash","Digital Wallet"];
 const SAVING_TYPES=["Savings","Fixed Deposit","Investment"];
@@ -822,6 +823,16 @@ const fld=(label,inner,cls)=>`<label class="fld ${cls||""}"><span>${label}</span
 const acctsFor=method=>S.accounts.filter(a=>method==="Cash"?a.type==="Cash":method==="Digital Wallet"?a.type==="Digital Wallet":a.type!=="Cash"&&a.type!=="Digital Wallet");
 /* Smart categories: built-in Sri Lankan merchants, then whatever you've done before. */
 const MERCHANT_RULES=[
+  [/netflix/i,"Netflix","Subscriptions","Netflix"],[/hbo\s*max|\bhbo\b|\bmax\.com|warner\s*bros/i,"HBO Max","Subscriptions","HBO Max"],
+  [/prime\s*video|amazon\s*prime|amzn\s*(?:prime|digital|mktp\s*digital)|primevideo/i,"Amazon Prime","Subscriptions","Amazon Prime"],
+  [/apple\.com\/bill|itunes|icloud|apple\s*(?:music|tv|one|services)|app\s*store/i,"Apple","Subscriptions","Apple"],
+  [/google\s*\*?\s*one\b|googleone/i,"Google One","Subscriptions","Google One"],[/youtube\s*(?:premium|music)|google\s*\*?\s*youtube/i,"YouTube Premium","Subscriptions","YouTube Premium"],
+  [/spotify/i,"Spotify","Subscriptions","Spotify"],[/disney/i,"Disney+","Subscriptions","Disney+"],
+  [/microsoft\s*\*?\s*365|msft\s*\*|office\s*365|xbox\s*game\s*pass/i,"Microsoft 365","Subscriptions","Microsoft 365"],
+  [/openai|chatgpt/i,"ChatGPT","Subscriptions","ChatGPT"],[/adobe/i,"Adobe","Subscriptions","Adobe"],[/canva/i,"Canva","Subscriptions","Canva"],
+  [/google\s*\*?\s*(?:play|storage|services)/i,"Google Play","Subscriptions","Other"],
+  [/insurance|assurance|\baia\b|ceylinco|allianz|janashakthi|softlogic\s*life|life\s*premium/i,null,"Bills","Insurance"],
+  [/leasing|loan\s*(?:instal+ment|repayment|payment)|\bemi\b/i,null,"Bills","Loan"],
   [/uber\s*eats/i,"Uber Eats","Food","Delivery"],[/pick\s*me\s*food/i,"PickMe Food","Food","Delivery"],
   [/pick\s*me/i,"PickMe","Transport","Taxi"],[/\buber\b|thanks\s+for\s+riding/i,"Uber","Transport","Taxi"],[/kangaroo\s*cabs?/i,"Kangaroo Cabs","Transport","Taxi"],
   [/\bsltb\b/i,"SLTB","Transport","Bus"],[/railway|train\s*ticket/i,"Sri Lanka Railways","Transport","Train"],[/srilankan\s*airlines|fits\s*air|cinnamon\s*air/i,null,"Transport","Flights"],
@@ -830,7 +841,6 @@ const MERCHANT_RULES=[
   [/ceypetco|ceylon\s*petroleum|lanka\s*ioc|\bioc\b|sinopec|rm\s*parks/i,null,"Fuel",null],
   [/dialog/i,"Dialog","Bills","Mobile"],[/mobitel/i,"Mobitel","Bills","Mobile"],[/airtel|hutch/i,null,"Bills","Mobile"],
   [/\bslt\b|sri\s*lanka\s*telecom/i,"SLT-Mobitel","Bills","Internet"],[/\bceb\b|ceylon\s*electricity|\bleco\b/i,null,"Bills","Electricity"],[/nwsdb|water\s*board/i,"NWSDB","Bills","Water"],
-  [/netflix|spotify|youtube\s*premium|disney|icloud|apple\.com\/bill/i,null,"Bills","Streaming subscriptions"],
   [/daraz|aliexpress|amazon|temu/i,null,"Shopping","Online"],[/odel|fashion\s*bug|nolimit|cool\s*planet|house\s*of\s*fashion/i,null,"Shopping","Clothing"],
   [/abans|softlogic|singer|damro/i,null,"Shopping","Electronics"],
   [/kfc|pizza\s*hut|burger\s*king|mcdonald|domino|taco\s*bell|subway/i,null,"Food","Takeaway"],
@@ -880,6 +890,7 @@ const BANK_ALIASES=[/com\s*bank|commercial\s*bank/i,/sampath/i,/\bhnb\b|hatton\s
 const SMS_DEBIT=/debited|spent|purchase|used\s+(?:for|at)|withdraw|\bpaid\b|charged|\bdr\b|txn\s+(?:at|of)|transaction\s+(?:at|of)/i;
 const SMS_CREDIT=/credited|deposit(?:ed)?|\breceived\b|refund|revers(?:al|ed)|payment\s+received|thank\s+you\s+for\s+(?:your\s+)?payment|\bcr\b/i;
 const bankAccts=()=>S.accounts.filter(a=>a.type!=="Cash");
+const CC_PAY=/credit\s*card\s*(?:bill\s*)?payment|card\s*(?:bill\s*)?(?:payment|settlement|repayment)|\bcc\s*(?:bill\s*)?payment|payment\s+(?:to|towards|for)\s+(?:your\s+)?(?:[a-z]+\s+){0,3}(?:credit\s*)?card/i;
 function smsSplit(text){const chunks=String(text||"").replace(/\r/g,"").split(/\n\s*\n/).map(x=>x.trim()).filter(Boolean);const out=[];
   for(const c of chunks){const lines=c.split("\n").map(x=>x.trim()).filter(Boolean);const smsLines=lines.filter(l=>/(?:rs\.?|lkr)\s*:?\s*[0-9]/i.test(l)&&(SMS_DEBIT.test(l)||SMS_CREDIT.test(l)));
     if(lines.length>1&&smsLines.length===lines.length)out.push(...lines);else out.push(c)}
@@ -893,12 +904,20 @@ function smsTarget(r,dir,text){if(r.card)return"c:"+r.card;if(r.acct&&acct(r.acc
   return defaultTarget(dir,text)}
 function analyseSms(text){const r=parseReceipt(text);let dir=r.type==="income"||r.type==="refund"?"credit":"debit";
   const deb=SMS_DEBIT.test(text),cred=SMS_CREDIT.test(text);if(cred&&!deb)dir="credit";else if(deb&&!cred)dir="debit";
-  const target=smsTarget(r,dir,text);let what,other="";
+  let target=smsTarget(r,dir,text);let what,other="";
   if(dir==="credit"){if(target.startsWith("c:"))what=/refund|revers/i.test(text)?"refund":"transfer";else what=/refund|revers/i.test(text)?"refund":/transfer|from\s+a\/c|own\s+account/i.test(text)?"transfer":"income"}
   else{what=r.type==="fuel"&&S.vehicles.length?"Fuel":(r.cat&&CATS[r.cat]?r.cat:"Other");if(/own\s*a\/?c|own\s+account|to\s+your\s+(?:savings|a\/c|account|card)/i.test(text)&&target.startsWith("a:"))what="transfer"}
   if(what==="transfer"){const opts=smsOtherOptions(dir,target);other=opts.length?opts[0][0]:""}
   if((what==="Fuel"||what==="Vehicle")&&S.vehicles.length)other=S.vehicles[0].id;
-  return{text,dir,target,what,other,amount:r.amount||"",date:r.date||today(),merchant:r.merchant||"",sub:r.sub,subFor:r.cat,salary:/salary/i.test(text),method:/debit\s*card|\bpos\b/i.test(text)?"Debit Card":undefined}}
+  let merchant=r.merchant||"";
+  if(CC_PAY.test(text)&&S.cards.length){const digs=[...text.matchAll(/(\d{4})\b/g)].map(x=>x[1]);
+    const byBank=()=>{for(const re of BANK_ALIASES)if(re.test(text)){const cs=S.cards.filter(c=>re.test(c.bank||"")||re.test(c.name||""));if(cs.length===1)return cs[0]}return null};
+    const cardHit=S.cards.find(c=>c.last4&&digs.includes(c.last4))||byBank()||(S.cards.length===1?S.cards[0]:null);
+    const acctHit=bankAccts().find(a=>{const d=a.last4||(a.nick||"").replace(/\D/g,"").slice(-4);return d.length===4&&digs.includes(d)});
+    if(dir==="debit"){target=acctHit?"a:"+acctHit.id:(target.startsWith("a:")?target:defaultTarget("debit",""));what="transfer";other=cardHit?"c:"+cardHit.id:"c:"+S.cards[0].id}
+    else{if(cardHit)target="c:"+cardHit.id;what="transfer";const o=smsOtherOptions("credit",target);other=acctHit&&target.startsWith("c:")?"a:"+acctHit.id:(o[0]||[""])[0]}
+    merchant=""}
+  return{text,dir,target,what,other,amount:r.amount||"",date:r.date||today(),merchant,sub:r.sub,subFor:r.cat,salary:/salary/i.test(text),method:/debit\s*card|\bpos\b/i.test(text)?"Debit Card":undefined}}
 function smsTargetOptions(){return`<optgroup label="Bank accounts">${bankAccts().map(a=>`<option value="a:${a.id}">${esc(acctLabel(a))}${a.type?" ("+esc(a.type)+")":""}</option>`).join("")}</optgroup>${S.cards.length?`<optgroup label="Credit cards">${S.cards.map(c=>`<option value="c:${c.id}">${esc(c.name)}</option>`).join("")}</optgroup>`:""}`}
 function smsWhatOptions(dir,target){const isCard=String(target).startsWith("c:");
   if(dir==="credit")return isCard?[["transfer","Card payment from my account"],["refund","Refund or cashback"]]:[["income","Income"],["refund","Refund"],["transfer","Transfer from my own account"]];

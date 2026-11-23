@@ -1,5 +1,5 @@
 "use strict";
-const APP_VERSION="2026.10.31-assets-from-expenses";
+const APP_VERSION="2026.11.01-sms-import";
 
 /* ================= Constants ================= */
 const VIEWS=[["dashboard","Dashboard"],["salary","Salary & planner"],["transactions","Transactions"],["accounts","Bank Accounts"],["cards","Credit Cards"],["bills","Bills"],["food","Food & Groceries"],["vehicles","Vehicles"],["fuel","Fuel"],["budget","Budget"],["savings","Savings"],["assets","Assets"],["shares","Shares"],["pawning","Pawning"],["loans","Loans"],["reports","Reports"],["settings","Settings"]];
@@ -507,7 +507,7 @@ function filtered(){const F=UI.filters;return L().all.filter(t=>{
 function vTransactions(){const F=UI.filters;const list=filtered();const on=Object.values(F).some(Boolean);
   const T={spend:0,income:0,xfer:0};for(const t of list){const e=eff(t);T.spend+=e.spend;T.income+=e.income;if(t.type==="transfer"||t.type==="cc_payment")T.xfer+=+t.amount}
   const opt=(arr,val)=>arr.map(([v,l])=>`<option value="${esc(v)}" ${v===val?"selected":""}>${esc(l)}</option>`).join("");
-  return`${head("Transactions",`${list.length} shown`,`<button class="btn" data-act="paste">Paste bank SMS</button><button class="btn" data-act="export-csv">Export CSV</button>`)}
+  return`${head("Transactions",`${list.length} shown`,`<button class="btn" data-act="paste">Paste bank SMS</button><button class="btn" data-act="sms-import">Import SMS file</button><button class="btn" data-act="export-csv">Export CSV</button>`)}
   <div class="panel"><form class="filters" data-form="filters">
     <label class="fld"><span>Search</span><input name="q" value="${esc(F.q||"")}" placeholder="Merchant, note, reference"></label>
     <label class="fld"><span>From</span><input type="date" name="from" value="${F.from||""}"></label>
@@ -1151,7 +1151,7 @@ function smsTarget(r,dir,text){if(r.card)return"c:"+r.card;if(r.cur){const fa=S.
   for(const re of BANK_ALIASES){if(!re.test(text))continue;const cs=S.cards.filter(c=>re.test(c.bank||"")||re.test(c.name||"")),as=bankAccts().filter(a=>re.test(a.bank||"")||re.test(a.name||""));
     if(wantsCard&&cs.length)return"c:"+cs[0].id;if(as.length)return"a:"+(as.find(a=>a.type==="Savings")||as[0]).id;if(cs.length)return"c:"+cs[0].id}
   return defaultTarget(dir,text)}
-function analyseSms(text){const r=parseReceipt(text);let dir=r.type==="income"||r.type==="refund"?"credit":"debit";
+function analyseSms(text0,extra){const text=extra?text0+"\n"+extra:text0;const r=parseReceipt(text);let dir=r.type==="income"||r.type==="refund"?"credit":"debit";
   const deb=SMS_DEBIT.test(text),cred=SMS_CREDIT.test(text);if(cred&&!deb)dir="credit";else if(deb&&!cred)dir="debit";
   let target=smsTarget(r,dir,text);let what,other="";
   if(dir==="credit"){if(target.startsWith("c:"))what=/refund|revers/i.test(text)?"refund":"transfer";else what=/refund|revers/i.test(text)?"refund":/transfer|from\s+a\/c|own\s+account/i.test(text)?"transfer":"income"}
@@ -1171,7 +1171,7 @@ function analyseSms(text){const r=parseReceipt(text);let dir=r.type==="income"||
     if(dir==="debit"){target=acctHit?"a:"+acctHit.id:(target.startsWith("a:")?target:defaultTarget("debit",""));what="transfer";other=cardHit?"c:"+cardHit.id:"c:"+S.cards[0].id}
     else{if(cardHit)target="c:"+cardHit.id;what="transfer";const o=smsOtherOptions("credit",target);other=acctHit&&target.startsWith("c:")?"a:"+acctHit.id:(o[0]||[""])[0]}
     merchant=""}
-  return{text,dir,target,what,other,amount:r.amount||"",date:r.date||today(),merchant,sub:r.sub,subFor:r.cat,salary:/salary/i.test(text),method:/debit\s*card|\bpos\b/i.test(text)?"Debit Card":undefined}}
+  return{text:text0,dir,target,what,other,amount:r.amount||"",date:r.date||today(),merchant,sub:r.sub,subFor:r.cat,salary:/salary/i.test(text),method:/debit\s*card|\bpos\b/i.test(text)?"Debit Card":undefined}}
 function smsTargetOptions(){return`<optgroup label="Bank accounts">${bankAccts().map(a=>`<option value="a:${a.id}">${esc(acctLabel(a))}${a.type?" ("+esc(a.type)+")":""}</option>`).join("")}</optgroup>${S.cards.length?`<optgroup label="Credit cards">${S.cards.map(c=>`<option value="c:${c.id}">${esc(c.name)}</option>`).join("")}</optgroup>`:""}`}
 function smsWhatOptions(dir,target){const isCard=String(target).startsWith("c:");
   if(dir==="credit")return isCard?[["transfer","Card payment from my account"],["refund","Refund or cashback"]]:[["income","Income"],["refund","Refund"],["transfer","Transfer from my own account"]];
@@ -1217,7 +1217,7 @@ function smsRowHtml(m,i){const what=smsWhatOptions(m.dir,m.target);if(!what.some
   const sel=(f,opts,val,label)=>`<label class="fld"><span>${label}</span><select data-sms="${f}" data-i="${i}">${typeof opts==="string"?opts:opt(opts,val)}</select></label>`;
   return`<div style="border:1px solid ${m.dir==="credit"?"var(--tea)":"var(--line)"};border-radius:14px;padding:12px;display:grid;gap:10px;${m.use?"":"opacity:.62"}">
     <label class="chk" style="justify-content:space-between;gap:10px"><span style="display:flex;gap:8px;align-items:center"><input type="checkbox" data-sms="use" data-i="${i}" ${m.use?"checked":""}> <b class="num ${m.dir==="credit"?"pos":""}">${m.dir==="credit"?"+":"−"}${+m.amount>0?fmtCur(+m.amount,smsCur(m)):"?"}</b></span><span class="badge ${m.dir==="credit"?"b-paid":"b-up"}">${m.dir==="credit"?"Credit":"Debit"}</span></label>
-    <p class="hint" style="overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${esc(m.text)}</p>
+    <p class="hint" style="overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${m.sender?`<b>${esc(m.sender)}</b>, `:""}${esc(m.text)}</p>
     ${dup?`<p class="info" style="padding:8px 10px">${dup.batch?`This is the other side of a message above (${esc(txTitle(dup.tx))}). Money moving between your own accounts is one transaction, so ${m.use?"untick this one":"it's unticked"}.`:`This looks like it's already in Kasi (${esc(txTitle(dup.tx))}, ${fdate(dup.tx.date,{day:"numeric",month:"short"})}). ${m.use?"Untick it unless it's a separate payment.":"It's unticked so it isn't added twice."}`}</p>`:""}
     <div class="fr">${sel("dir",[["debit","Debit (money out)"],["credit","Credit (money in)"]],m.dir,"Debit or credit")}${sel("target",smsTargetOptions().replace(`value="${m.target}"`,`value="${m.target}" selected`),m.target,m.dir==="credit"?"Into":"From")}</div>
     <div class="fr">${sel("what",what,m.what,m.dir==="credit"?"What was it?":"Spent on")}${needOther?sel("other",otherOpts,m.other,m.what==="transfer"||m.what==="cashadv"?(m.dir==="credit"?"Came from":"Went to"):m.what==="loan"?"Which loan":"Vehicle"):"<div></div>"}</div>
@@ -1225,8 +1225,8 @@ function smsRowHtml(m,i){const what=smsWhatOptions(m.dir,m.target);if(!what.some
     <label class="fld"><span>Shop or description</span><input data-sms="merchant" data-i="${i}" value="${esc(m.merchant)}" autocomplete="off"></label>
   </div>`}
 function smsReviewRender(){const box=$("#smsRows");if(!box)return;box.innerHTML=SMS_ROWS.map(smsRowHtml).join("");const n=SMS_ROWS.filter(m=>m.use).length;const b=$("#smsSave");if(b){b.textContent=n?`Add ${n} transaction${n===1?"":"s"}`:"Nothing ticked";b.disabled=!n}}
-function smsReview(msgs){SMS_ROWS=msgs.map(analyseSms);
-  openSheet(SMS_ROWS.length===1?"Check this message":`Check ${SMS_ROWS.length} messages`,`<p class="muted small" style="margin-bottom:10px">Kasi filled in what it could. Change anything that's wrong, untick anything you don't want, then add them.</p><div id="smsRows" style="display:grid;gap:12px"></div>
+function smsReview(msgs){SMS_ROWS=msgs.map(x=>{const o=typeof x==="string"?{text:x}:x;const m=analyseSms(o.text,o.sender);if(o.date&&!parseDateIn(o.text))m.date=o.date;if(o.sender)m.sender=o.sender;return m});
+  openSheet(SMS_ROWS.length===1?"Check this message":`Check ${SMS_ROWS.length} messages`,`${SMS_ROWS.length>5?`<div class="actions" style="justify-content:flex-start;margin:0 0 8px"><button type="button" class="btn sm" data-act="sms-all" data-v="1">Tick all</button><button type="button" class="btn sm" data-act="sms-all" data-v="0">Untick all</button></div>`:""}<p class="muted small" style="margin-bottom:10px">Kasi filled in what it could. Change anything that's wrong, untick anything you don't want, then add them.</p><div id="smsRows" style="display:grid;gap:12px"></div>
     <div class="actions" style="position:sticky;bottom:-22px;background:var(--surface);padding:12px 0 4px;margin-top:6px"><button class="btn" data-act="close">Cancel</button><button class="btn primary" id="smsSave" data-act="sms-save">Add</button></div>`,
     root=>{smsReviewRender();
       const onChange=e=>{const el=e.target.closest("[data-sms]");if(!el)return;const m=SMS_ROWS[+el.dataset.i];const f=el.dataset.sms;
@@ -1241,10 +1241,68 @@ function smsSave(){let added=0,skipped=0;const errs=[];
     stampCurrency(b.tx);if(smsDuplicate(b.tx)&&!m.touched){skipped++;return}Object.keys(b.tx).forEach(k=>b.tx[k]===undefined&&delete b.tx[k]);upsertTx(b.tx);added++});
   if(errs.length&&!added){toast(errs[0]);return}
   saveState();closeSheet();render();toast(`Added ${added} transaction${added===1?"":"s"}${skipped?`. Skipped ${skipped} already in Kasi`:""}${errs.length?`. ${errs.length} need${errs.length===1?"s":""} fixing and weren't added`:""}.`)}
+/* ---------- Bulk SMS import: CSV, Excel (.xlsx) and SMS Backup & Restore (.xml) ---------- */
+function parseCSV(text){text=String(text).replace(/^\ufeff/,"");const first=text.split(/\r?\n/)[0]||"";const cands=[",",";","\t"];const delim=cands.map(d=>[d,first.split(d).length]).sort((a,b)=>b[1]-a[1])[0][0];
+  const rows=[];let row=[],cell="",q=false;for(let i=0;i<text.length;i++){const ch=text[i];
+    if(q){if(ch==='"'){if(text[i+1]==='"'){cell+='"';i++}else q=false}else cell+=ch}
+    else if(ch==='"')q=true;else if(ch===delim){row.push(cell);cell=""}else if(ch==="\n"||ch==="\r"){if(ch==="\r"&&text[i+1]==="\n")i++;row.push(cell);rows.push(row);row=[];cell=""}else cell+=ch}
+  if(cell!==""||row.length){row.push(cell);rows.push(row)}return rows.filter(r=>r.some(c=>String(c).trim()!==""))}
+async function inflateRaw(u8){const ds=new DecompressionStream("deflate-raw");const w=ds.writable.getWriter();w.write(u8);w.close();const r=ds.readable.getReader();const parts=[];let n=0;for(;;){const {value,done}=await r.read();if(done)break;parts.push(value);n+=value.length}const out=new Uint8Array(n);let o=0;for(const p of parts){out.set(p,o);o+=p.length}return out}
+async function unzip(buf,wanted){const u=new Uint8Array(buf),dv=new DataView(buf);let e=u.length-22;while(e>=0&&dv.getUint32(e,true)!==0x06054b50)e--;if(e<0)throw new Error("This doesn't look like an Excel file.");
+  const count=dv.getUint16(e+10,true);let p=dv.getUint32(e+16,true);const out={};const td=new TextDecoder();
+  for(let i=0;i<count;i++){const method=dv.getUint16(p+10,true),csize=dv.getUint32(p+20,true),nl=dv.getUint16(p+28,true),xl=dv.getUint16(p+30,true),cl=dv.getUint16(p+32,true),off=dv.getUint32(p+42,true);const name=td.decode(u.subarray(p+46,p+46+nl));p+=46+nl+xl+cl;
+    if(!wanted(name))continue;const lnl=dv.getUint16(off+26,true),lxl=dv.getUint16(off+28,true);const data=u.subarray(off+30+lnl+lxl,off+30+lnl+lxl+csize);out[name]=td.decode(method===0?data:await inflateRaw(data))}return out}
+async function readXlsx(buf){const files=await unzip(buf,n=>n==="xl/sharedStrings.xml"||/^xl\/worksheets\/sheet\d+\.xml$/.test(n));const sheetName=Object.keys(files).filter(n=>n.startsWith("xl/worksheets/")).sort()[0];if(!sheetName)throw new Error("No sheet found in this Excel file.");
+  const dp=new DOMParser();const strings=[];if(files["xl/sharedStrings.xml"]){const sd=dp.parseFromString(files["xl/sharedStrings.xml"],"application/xml");for(const si of sd.getElementsByTagName("si"))strings.push([...si.getElementsByTagName("t")].map(t=>t.textContent).join(""))}
+  const doc=dp.parseFromString(files[sheetName],"application/xml");const rows=[];const colIdx=ref=>{const m=/^([A-Z]+)/.exec(ref||"");let n=0;if(m)for(const ch of m[1])n=n*26+ch.charCodeAt(0)-64;return n-1};
+  for(const r of doc.getElementsByTagName("row")){const row=[];for(const c of r.getElementsByTagName("c")){const t=c.getAttribute("t"),vEl=c.getElementsByTagName("v")[0];let v=vEl?vEl.textContent:"";
+      if(t==="s")v=strings[+v]||"";else if(t==="inlineStr")v=[...c.getElementsByTagName("t")].map(x=>x.textContent).join("");const i=colIdx(c.getAttribute("r"));row[i>=0?i:row.length]=v}
+    rows.push([...row].map(x=>x==null?"":x))}return rows.filter(r=>r.some(c=>String(c).trim()!==""))}
+function readSmsBackupXml(text){const doc=new DOMParser().parseFromString(text,"application/xml");const out=[];for(const m of doc.getElementsByTagName("sms")){if(m.getAttribute("type")&&m.getAttribute("type")!=="1")continue;out.push({text:m.getAttribute("body")||"",sender:m.getAttribute("contact_name")&&m.getAttribute("contact_name")!=="(Unknown)"?m.getAttribute("contact_name"):(m.getAttribute("address")||""),date:fileDate(m.getAttribute("date"))})}return out}
+function fileDate(v){if(v==null||v==="")return null;v=String(v).trim();if(/^\d{12,13}$/.test(v)){const d=new Date(+v);return isNaN(d)?null:ymd(d)}if(/^\d{9,10}$/.test(v)){const d=new Date(+v*1000);return isNaN(d)?null:ymd(d)}
+  if(/^\d{4,5}(\.\d+)?$/.test(v)){const d=new Date(Math.round((+v-25569)*864e5));return isNaN(d)?null:ymd(new Date(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()))}
+  let m=v.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);if(m)return m[1]+"-"+pad(+m[2])+"-"+pad(+m[3]);
+  m=v.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/);if(m){let y=+m[3];if(y<100)y+=2000;const a=+m[1],b=+m[2];const [d,mo]=a>12?[a,b]:b>12?[b,a]:[a,b];if(mo>=1&&mo<=12&&d>=1&&d<=31)return y+"-"+pad(mo)+"-"+pad(d)}
+  const d=new Date(v);return isNaN(d)?null:ymd(d)}
+function rowsToMessages(rows){if(!rows.length)return[];const head=rows[0].map(h=>String(h||"").toLowerCase().trim());const find=re=>head.findIndex(h=>re.test(h));
+  let ti=find(/^(body|message|messages|text|sms|content|msg|message body|message text)$/),di=find(/date|time|received|sent/),si=find(/^(address|sender|from|number|contact|phone|sender id|contact name|name)$/);
+  let start=1;if(ti<0){start=head.some(h=>/[a-z]/.test(h)&&h.length<25&&!/(rs|lkr)\s*[0-9]/i.test(h))&&rows.length>1?1:0;const w=rows[0].map((_,c)=>sum(rows.slice(start,start+50),r=>String(r[c]||"").length));ti=w.indexOf(Math.max(...w));if(start===0){di=-1;si=-1}}
+  return rows.slice(start).map(r=>({text:String(r[ti]||"").trim(),date:di>=0?fileDate(r[di]):null,sender:si>=0?String(r[si]||"").trim():""})).filter(x=>x.text)}
+const OTP_RE=/\botp\b|one[\s-]*time\s*(?:pass|code|pin)|verification\s*code|security\s*code|do\s*not\s*share|\bpin\b\s*(?:is|:)/i;
+function isTxnSms(t){return !OTP_RE.test(t)&&/(?:rs\.?|lkr|රු|£|\$|€|\b(?:gbp|usd|eur)\b)\s*:?\s*[0-9]/i.test(t)&&(SMS_DEBIT.test(t)||SMS_CREDIT.test(t)||CC_PAY.test(t)||/purchase|spent|txn|transaction|withdraw|payment/i.test(t))}
+let IMPORT_ITEMS=[];
+function importSheet(){openSheet("Import SMS from a file",`<p class="muted" style="margin-bottom:10px">Choose a CSV or Excel file with a column of messages, or the backup file from the <b>SMS Backup &amp; Restore</b> app on Android. A date and a sender column help but aren't required.</p>
+  <label class="fld"><span>File</span><input type="file" id="smsFile" accept=".csv,.xlsx,.xml,.txt,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/xml,application/xml,text/plain"></label>
+  <div id="importOut" style="margin-top:12px"></div>
+  <details style="margin-top:14px"><summary class="small" style="cursor:pointer">How do I get my messages into a file?</summary><div class="small muted" style="display:grid;gap:6px;margin-top:8px">
+    <p><b>Android:</b> install <b>SMS Backup &amp; Restore</b> (free), tap <b>Back up</b>, choose Messages, and save the backup. Then choose that .xml file here.</p>
+    <p><b>iPhone:</b> iPhones don't export texts on their own. A computer program such as iMazing can export your messages to Excel or CSV.</p>
+    <p><b>Your own spreadsheet:</b> put one message per row. Add a Date column and a Sender column if you have them.</p>
+    <p>Old .xls files aren't supported. In Excel, use Save As and choose .xlsx or CSV.</p></div></details>`,
+  root=>{root.querySelector("#smsFile").addEventListener("change",async e=>{const f=e.target.files[0];if(!f)return;const out=root.querySelector("#importOut");out.innerHTML='<p class="faint small">Reading the file…</p>';
+    try{let items;const name=f.name.toLowerCase();
+      if(name.endsWith(".xlsx")){if(typeof DecompressionStream==="undefined")throw new Error("This browser can't open Excel files. Save the file as CSV and try again.");items=rowsToMessages(await readXlsx(await f.arrayBuffer()))}
+      else if(name.endsWith(".xls"))throw new Error("Old .xls files aren't supported. In Excel, use Save As and choose .xlsx or CSV.");
+      else{const text=await f.text();if(name.endsWith(".xml")||/^\s*<\?xml|<smses/i.test(text.slice(0,200)))items=readSmsBackupXml(text);else if(name.endsWith(".txt"))items=smsSplit(text).map(t=>({text:t}));else items=rowsToMessages(parseCSV(text))}
+      importPreview(items,out)}catch(x){out.innerHTML=`<p class="info" style="border-left:3px solid var(--clay)">${esc(x.message||"Couldn't read this file.")}</p>`}})})}
+function importPreview(all,out){const txn=all.filter(x=>isTxnSms(x.text));const otp=all.filter(x=>OTP_RE.test(x.text)).length;
+  if(!txn.length){out.innerHTML=`<p class="info">Read ${all.length} message${all.length===1?"":"s"}, but none look like bank or card transactions.${all.length?" Check the file has a column with the full message text.":""}</p>`;return}
+  const by={};for(const x of txn){const k=x.sender||"(no sender)";by[k]=(by[k]||0)+1}const dates=txn.map(x=>x.date).filter(Boolean).sort();
+  IMPORT_ITEMS=txn;
+  out.innerHTML=`<p class="info">Read ${all.length} message${all.length===1?"":"s"}. <b>${txn.length}</b> look like bank or card transactions${otp?`; ${otp} one-time code message${otp===1?" was":"s were"} left out`:""}.</p>
+    <h3 style="margin:14px 0 6px">From</h3><div style="display:grid;gap:6px">${Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([k,n])=>`<label class="chk"><input type="checkbox" data-isender="${esc(k)}" checked> ${esc(k)} <span class="faint">(${n})</span></label>`).join("")}</div>
+    ${dates.length?`<div class="fr" style="margin-top:12px">${fld("From date",`<input type="date" id="impFrom" value="${dates[0]}">`)}${fld("To date",`<input type="date" id="impTo" value="${dates[dates.length-1]}">`)}</div>`:""}
+    <p class="hint" style="margin-top:8px">Next you'll check each one. Messages already in Kasi are unticked, so nothing is added twice.</p>
+    <div class="actions"><button type="button" class="btn" data-act="close">Cancel</button><button type="button" class="btn primary" id="impGo">Review messages</button></div>`;
+  const go=out.querySelector("#impGo");const count=()=>{const sel=pickImport(out);go.textContent=`Review ${sel.length} message${sel.length===1?"":"s"}`;go.disabled=!sel.length};out.addEventListener("change",count);count();
+  go.addEventListener("click",()=>{const sel=pickImport(out);if(sel.length>400&&!confirm(`That's ${sel.length} messages. Reviewing them all at once may be slow on a phone. Continue? You can narrow the dates instead.`))return;closeSheet();smsReview(sel.sort((a,b)=>(a.date||"")<(b.date||"")?-1:1))})}
+function pickImport(out){const on=new Set([...out.querySelectorAll("[data-isender]")].filter(c=>c.checked).map(c=>c.dataset.isender));const f=out.querySelector("#impFrom"),t=out.querySelector("#impTo");
+  return IMPORT_ITEMS.filter(x=>on.has(x.sender||"(no sender)")&&(!x.date||((!f||!f.value||x.date>=f.value)&&(!t||!t.value||x.date<=t.value))))}
 function openFromText(text){text=String(text||"").trim();if(!text){toast("There was nothing to read.");return}
   if(!bankAccts().length&&!S.cards.length){toast("Add a bank account or credit card first.");return}
   const msgs=smsSplit(text);closeSheet();smsReview(msgs.length?msgs:[text])}
 function pasteSheet(){openSheet("Paste bank or card SMS",`<form class="f" data-form="paste"><label class="fld"><span>Paste one or more messages</span><textarea name="text" rows="8" autofocus placeholder="e.g. Your card ending 4321 was used for LKR 1,240.00 at PICKME on 12/10/2026&#10;&#10;LKR 25,000.00 credited to your a/c xx0917 on 14/10/2026"></textarea></label>
+  <p class="hint">Have lots of messages? <a href="#" data-act="sms-import">Import a CSV, Excel or SMS backup file</a> instead.</p>
   <p class="hint">Paste several at once, with a blank line between messages. Next, you'll choose Debit or Credit and the account or card for each one before anything is saved.${isIOS()?"":" On Android you can also share a message straight to Kasi from the Share menu."}</p>
   <div class="actions"><button type="button" class="btn" data-act="close">Cancel</button><button class="btn primary">Read messages</button></div></form>`)}
 function handleLaunchParams(){const q=new URLSearchParams(location.search);const shared=[q.get("share_title"),q.get("share_text"),q.get("share_url")].filter(Boolean).join("\n");
@@ -1553,6 +1611,8 @@ document.addEventListener("click",async e=>{
     case "prices":closeSheet();pricesForm();break;
     case "del-stock":{const n=L().all.filter(t=>t.stockId===ds.id).length;if(n){toast(`This company has ${n} transaction${n===1?"":"s"}. Delete those first.`);break}if(confirm("Delete this company?")){S.stocks=S.stocks.filter(x=>x.id!==ds.id);saveState();invalidate();closeSheet();render()}break}
     case "paste":closeSheet();pasteSheet();break;
+    case "sms-import":closeSheet();importSheet();break;
+    case "sms-all":for(const m of SMS_ROWS){m.use=ds.v==="1";m.touched=true}smsReviewRender();break;
     case "sms-save":smsSave();break;
     case "to-asset":{const t=findTx(ds.id);if(!t)break;closeSheet();const isVeh=t.cat==="Vehicle"||/bike|motor|scooter|car\b|van\b|lorry|tuk|three.?wheel|vehicle/i.test((t.merchant||"")+" "+(t.desc||"")+" "+(t.notes||""));
       const nm=t.desc||t.merchant||"";

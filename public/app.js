@@ -1,8 +1,8 @@
 "use strict";
-const APP_VERSION="2026.10.28-subscriptions";
+const APP_VERSION="2026.10.29-loans-currency";
 
 /* ================= Constants ================= */
-const VIEWS=[["dashboard","Dashboard"],["salary","Salary & planner"],["transactions","Transactions"],["accounts","Bank Accounts"],["cards","Credit Cards"],["bills","Bills"],["food","Food & Groceries"],["vehicles","Vehicles"],["fuel","Fuel"],["budget","Budget"],["savings","Savings"],["assets","Assets"],["shares","Shares"],["pawning","Pawning"],["reports","Reports"],["settings","Settings"]];
+const VIEWS=[["dashboard","Dashboard"],["salary","Salary & planner"],["transactions","Transactions"],["accounts","Bank Accounts"],["cards","Credit Cards"],["bills","Bills"],["food","Food & Groceries"],["vehicles","Vehicles"],["fuel","Fuel"],["budget","Budget"],["savings","Savings"],["assets","Assets"],["shares","Shares"],["pawning","Pawning"],["loans","Loans"],["reports","Reports"],["settings","Settings"]];
 const CATS={
   Groceries:["Supermarket","Household items","Vegetables","Meat & fish","General groceries"],
   Food:["Restaurants","Takeaway","Coffee","Delivery","Lunch","Dinner","Snacks"],
@@ -16,7 +16,7 @@ const CATS={
   Medical:["Doctor","Pharmacy","Lab tests","Hospital","Other"],
   Education:["Fees","Books","Classes","Other"],
   Personal:["Salon","Fitness","Personal care","Other"],
-  "Bank charges":["Transfer fee","Card fee","Interest","Pawning interest","Pawning fee","Other"],
+  "Bank charges":["Transfer fee","Card fee","Interest","Loan interest","Loan fee","Pawning interest","Pawning fee","Other"],
   Other:["Other"]
 };
 const BILL_CATS=CATS.Bills;
@@ -28,7 +28,7 @@ const SPENDABLE=["Salary","Current","Cash","Digital Wallet"];
 const FUEL_TYPES=["Petrol 92","Petrol 95","Auto Diesel","Super Diesel","Electric charge"];
 const FREQ={Monthly:1,Quarterly:3,"Every 6 months":6,Annually:12,Once:0};
 const MAINT=["Service","Repairs","Tyres","Battery","Washing","Accessories"];
-const TYPE_LABEL={income:"Income",expense:"Expense",cc_purchase:"Credit card purchase",cc_payment:"Credit card payment",bill:"Bill payment",fuel:"Fuel",transfer:"Transfer",refund:"Refund",asset_buy:"Asset purchase",asset_sell:"Asset sale",share_buy:"Share purchase",share_sell:"Share sale",dividend:"Dividend",share_adjust:"Bonus or split",pawn_take:"Pawning loan",pawn_pay:"Pawning payment"};
+const TYPE_LABEL={income:"Income",expense:"Expense",cc_purchase:"Credit card purchase",cc_payment:"Credit card payment",bill:"Bill payment",fuel:"Fuel",transfer:"Transfer",refund:"Refund",asset_buy:"Asset purchase",asset_sell:"Asset sale",share_buy:"Share purchase",share_sell:"Share sale",dividend:"Dividend",share_adjust:"Bonus or split",pawn_take:"Pawning loan",pawn_pay:"Pawning payment",loan_take:"Loan received",loan_pay:"Loan payment"};
 const SECTORS=["Banks","Diversified Financials","Insurance","Capital Goods","Consumer Services","Food, Beverage & Tobacco","Materials","Energy","Utilities","Telecommunication","Real Estate","Health Care","Retailing","Transportation","Consumer Durables","Other"];
 const CSE_SUGGEST=[["JKH.N0000","John Keells Holdings","Capital Goods"],["COMB.N0000","Commercial Bank of Ceylon","Banks"],["HNB.N0000","Hatton National Bank","Banks"],["SAMP.N0000","Sampath Bank","Banks"],["SEYB.N0000","Seylan Bank","Banks"],["NDB.N0000","National Development Bank","Banks"],["DIAL.N0000","Dialog Axiata","Telecommunication"],["SLTL.N0000","Sri Lanka Telecom","Telecommunication"],["LOLC.N0000","LOLC Holdings","Diversified Financials"],["HAYL.N0000","Hayleys","Capital Goods"],["CTC.N0000","Ceylon Tobacco Company","Food, Beverage & Tobacco"],["DIST.N0000","Distilleries Company of Sri Lanka","Food, Beverage & Tobacco"],["MELS.N0000","Melstacorp","Food, Beverage & Tobacco"],["CARG.N0000","Cargills (Ceylon)","Food, Beverage & Tobacco"],["CCS.N0000","Ceylon Cold Stores","Food, Beverage & Tobacco"],["LIOC.N0000","Lanka IOC","Energy"],["HHL.N0000","Hemas Holdings","Capital Goods"],["AEL.N0000","Access Engineering","Capital Goods"],["TJL.N0000","Teejay Lanka","Consumer Durables"],["RCL.N0000","Royal Ceramics Lanka","Capital Goods"],["SUN.N0000","Sunshine Holdings","Capital Goods"],["VONE.N0000","Vallibel One","Capital Goods"],["EXPO.N0000","Expolanka Holdings","Transportation"]];
 const ASSET_CATS=["Land & property","Vehicle","Gold & jewellery","Shares & unit trusts","Electronics","Furniture & appliances","Business","Collectibles","Other"];
@@ -121,7 +121,7 @@ let S=null;       // settings + entities
 let TX={};        // month -> [tx]
 let UI={view:"dashboard",filters:{},reportMonth:mkey(today()),budgetMonth:mkey(today()),foodMonth:mkey(today())};
 
-function freshState(){return{v:1,accounts:[{id:"cash",bank:"",name:"Cash in hand",type:"Cash",opening:0,nick:"",currency:"LKR"}],cards:[],vehicles:[],bills:[],assets:[],stocks:[],pawns:[],budgets:{},settings:{salaryDay:25,expectedSalary:0,plannedSavings:0,dueSoon:5,lastMethod:"Bank Account",lastAcct:"",theme:"auto"},months:[]}}
+function freshState(){return{v:1,accounts:[{id:"cash",bank:"",name:"Cash in hand",type:"Cash",opening:0,nick:"",currency:"LKR"}],cards:[],vehicles:[],bills:[],assets:[],stocks:[],pawns:[],loans:[],budgets:{},settings:{salaryDay:25,expectedSalary:0,plannedSavings:0,dueSoon:5,lastMethod:"Bank Account",lastAcct:"",theme:"auto",rates:{}},months:[]}}
 function saveState(){Store.put("state",S)}
 function saveMonth(m){Store.put("tx-"+m,{items:TX[m]||[]})}
 function allTx(){const out=[];for(const m of Object.keys(TX))out.push(...TX[m]);return out.sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:(a.ts||0)-(b.ts||0))}
@@ -155,7 +155,21 @@ function assetValue(a,date){date=date||today();if(a.sold&&a.sold.date<=date)retu
   const buys=assetBuys(a,date);
   if(val!==null)return grow(val,vd)+sum(buys.filter(t=>t.date>vd),t=>grow(+t.amount,t.date));
   return(+a.initCost?grow(+a.initCost,a.initDate||st):0)+sum(buys,t=>grow(+t.amount,t.date))}
-function netWorth(date){date=date||today();let n=0;for(const a of S.accounts)if(isLKR(a))n+=acctBal(a.id,date);for(const c of S.cards)n-=cardOut(c.id,date);for(const a of(S.assets||[]))n+=assetValue(a,date);return n+portfolioValue(date)-pawnsOwed(date)}
+function netWorth(date){date=date||today();let n=0;for(const a of S.accounts)n+=acctBal(a.id,date)*rateFor(a.currency);for(const c of S.cards)n-=cardOut(c.id,date);for(const a of(S.assets||[]))n+=assetValue(a,date);return n+portfolioValue(date)-pawnsOwed(date)-loansOwed(date)}
+/* ---- Loans: borrowed money is a liability, never income; only interest is spending ---- */
+const loan=id=>(S.loans||[]).find(x=>x.id===id);
+const loanLabel=l=>l?(l.name||"Loan")+(l.lender?", "+l.lender:""):"(removed loan)";
+function loanTxs(l,upto){return L().all.filter(t=>t.loanId===l.id&&(!upto||t.date<=upto))}
+function loanStart(l){return l.existing?l.owedDate:l.date}
+function loanOutstanding(l,date){date=date||today();if(loanStart(l)>date)return 0;return Math.max(0,(+(l.existing?l.owedAmount:l.principal)||0)-sum(loanTxs(l,date).filter(t=>t.type==="loan_pay"),t=>+t.principalPaid||0))}
+function loansOwed(date){return sum(S.loans||[],l=>loanOutstanding(l,date))}
+function loanInstalment(P,ratePct,n){P=+P||0;n=+n||0;if(!P||!n)return 0;const r=(+ratePct||0)/1200;return r?P*r/(1-Math.pow(1+r,-n)):P/n}
+function loanSplit(l,amount){const out=loanOutstanding(l);const interest=Math.min(+amount,Math.round(out*(+l.rate||0)/1200*100)/100);const principal=Math.min(out,Math.round((+amount-interest)*100)/100);return{interest,principal:Math.max(0,principal)}}
+function loanMonthsLeft(l){const B=loanOutstanding(l),P=+l.instalment||0,r=(+l.rate||0)/1200;if(!B)return 0;if(!P)return null;if(!r)return Math.ceil(B/P);if(r*B>=P)return null;return Math.ceil(-Math.log(1-r*B/P)/Math.log(1+r))}
+function loanDue(l){const t0=today(),d=parse(t0),day=+l.payDay||1;let due=ymd(onDay(d.getFullYear(),d.getMonth(),day));
+  const paidThisMonth=loanTxs(l).some(t=>t.type==="loan_pay"&&mkey(t.date)===mkey(t0));if(paidThisMonth||loanStart(l)>=due&&mkey(loanStart(l))===mkey(t0))due=ymd(onDay(d.getFullYear(),d.getMonth()+1,day));return{due,paidThisMonth}}
+function loanStatus(l){const t0=today();if(loanOutstanding(l)<=0.005)return{label:"Paid off",cls:"b-paid",active:false};const {due,paidThisMonth}=loanDue(l);
+  if(paidThisMonth)return{label:"Paid this month",cls:"b-paid",active:true};if(due<t0)return{label:"Overdue",cls:"b-over",active:true};if(daysBetween(t0,due)<=(+S.settings.dueSoon||5))return{label:"Due soon",cls:"b-soon",active:true};return{label:"Upcoming",cls:"b-up",active:true}}
 /* ---- Pawning: a loan secured on gold; a liability, never income ---- */
 const pawn=id=>(S.pawns||[]).find(x=>x.id===id);
 const pawnLabel=pw=>pw?`${pw.items||"Pawn"}${pw.lender?", "+pw.lender:""}`:"(removed pawn)";
@@ -189,14 +203,14 @@ const cardLabel=c=>c?c.name:"(removed card)";
 // Each transaction produces account deltas, card-outstanding deltas, spending and income.
 function eff(t){
   const amt=+t.amount||0,fee=+t.fee||0,d=[];let spend=0,income=0,cat=t.cat||"Other";
-  const pay=sign=>{if(t.card)d.push(["c",t.card,sign*amt]);else if(t.acct)d.push(["a",t.acct,-sign*amt])};
+  const pay=sign=>{if(t.card)d.push(["c",t.card,sign*amt]);else if(t.acct)d.push(["a",t.acct,-sign*amt])};const fx=txFx(t);
   switch(t.type){
     case "income":d.push(["a",t.acct,amt]);income=amt;break;
     case "expense":case "cc_purchase":pay(1);spend=amt;break;
     case "fuel":pay(1);spend=amt;cat="Fuel";break;
     case "bill":cat="Bills";if(!t.already){pay(1);spend=amt}break;
-    case "transfer":d.push(["a",t.acct,-(amt+fee)]);d.push(["a",t.toAcct,amt]);if(fee){spend=fee;cat="Bank charges"}break;
-    case "cc_payment":d.push(["a",t.acct,-(amt+fee)]);d.push(["c",t.card,-amt]);if(fee){spend=fee;cat="Bank charges"}break;
+    case "transfer":d.push(["a",t.acct,-(amt+fee)]);d.push(["a",t.toAcct,t.toAmount!=null?+t.toAmount:(acctCur(t.acct)===acctCur(t.toAcct)?amt:amt*fx/(rateFor(acctCur(t.toAcct))||1))]);if(fee){spend=fee;cat="Bank charges"}break;
+    case "cc_payment":d.push(["a",t.acct,-(amt+fee)]);d.push(["c",t.card,-amt*fx]);if(fee){spend=fee;cat="Bank charges"}break;
     case "refund":pay(-1);spend=-amt;break;
     case "asset_buy":pay(1);if(t.countSpend){spend=amt;cat=t.cat||"Shopping"}break;
     case "asset_sell":d.push(["a",t.acct,amt]);break;
@@ -205,7 +219,10 @@ function eff(t){
     case "pawn_take":d.push(["a",t.acct,amt]);if(fee){spend=fee;cat="Bank charges"}break;
     case "pawn_pay":d.push(["a",t.acct,-amt]);if(+t.interest){spend=+t.interest;cat="Bank charges"}break;
     case "dividend":d.push(["a",t.acct,amt]);income=amt;break;
+    case "loan_take":d.push(["a",t.acct,amt]);if(fee){spend=fee;cat="Bank charges"}break;
+    case "loan_pay":d.push(["a",t.acct,-amt]);if(+t.interest){spend=+t.interest;cat="Bank charges"}break;
   }
+  if(fx!==1){spend*=fx;income*=fx}
   return{d,spend,income,cat};
 }
 const budgetCat=c=>BUDGET_CATS.includes(c)?c:"Other";
@@ -214,8 +231,15 @@ function monthRange(k){const [y,m]=k.split("-").map(Number);return[k+"-01",k+"-"
 function acctBal(id,upto){const a=acct(id);let b=+(a&&a.opening)||0;for(const t of L().all){if(upto&&t.date>upto)break;for(const [k,i,v] of eff(t).d)if(k==="a"&&i===id)b+=v}return b}
 function cardOut(id,upto){const c=card(id);let b=+(c&&c.opening)||0;for(const t of L().all){if(upto&&t.date>upto)break;for(const [k,i,v] of eff(t).d)if(k==="c"&&i===id)b+=v}return b}
 function isLKR(a){return !a.currency||a.currency==="LKR"}
+const CUR_SYM={GBP:"£",USD:"$",EUR:"€",AUD:"A$",AED:"AED ",INR:"₹"};
+const acctCur=id=>{const a=acct(id);return a&&a.currency?a.currency:"LKR"};
+const rateFor=c=>!c||c==="LKR"?1:(+((S.settings.rates||{})[c])||0);
+const fmtCur=(v,c)=>!c||c==="LKR"?rs(v):(v<0?"−":"")+(CUR_SYM[c]||c+" ")+nf2.format(Math.abs(+v||0));
+// Converts a transaction's own-currency amounts to rupees: the rate stored when it was saved, else today's rate.
+function txFx(t){if(t.card&&t.type!=="cc_payment")return 1;const c=acctCur(t.acct);if(c==="LKR")return 1;if(t.lkr!=null&&+t.amount)return +t.lkr/+t.amount;return rateFor(c)}
+function stampCurrency(t){if(t.card&&t.type!=="cc_payment")return;const c=acctCur(t.acct);if(!t.acct||c==="LKR"){delete t.cur;delete t.lkr;return}t.cur=c;if(t.lkr==null||t._restamp)t.lkr=Math.round(+t.amount*rateFor(c)*100)/100;delete t._restamp}
 function totals(from,to){
-  const r={income:0,salary:0,otherIncome:0,spend:0,byCat:{},bySub:{},savingsIn:0,transfers:0,ccPay:0,ccPurch:0,assetBuy:0,assetSell:0,shareBuy:0,shareSell:0,dividends:0,pawnIn:0,pawnOut:0};
+  const r={income:0,salary:0,otherIncome:0,spend:0,byCat:{},bySub:{},savingsIn:0,transfers:0,ccPay:0,ccPurch:0,assetBuy:0,assetSell:0,shareBuy:0,shareSell:0,dividends:0,pawnIn:0,pawnOut:0,loanIn:0,loanOut:0};
   for(const t of L().all){if(!inRange(t,from,to))continue;const e=eff(t);
     r.income+=e.income;if(t.type==="income"){if(t.sub==="Salary")r.salary+=e.income;else r.otherIncome+=e.income}
     if(e.spend){r.spend+=e.spend;r.byCat[e.cat]=(r.byCat[e.cat]||0)+e.spend;const sk=e.cat+"|"+(t.type==="fuel"?(t.fuelType||"Fuel"):(t.sub||"Other"));r.bySub[sk]=(r.bySub[sk]||0)+e.spend}
@@ -223,7 +247,7 @@ function totals(from,to){
       if(to&&SAVING_TYPES.includes(to.type)&&!(fr&&SAVING_TYPES.includes(fr.type)))r.savingsIn+=+t.amount;
       if(fr&&SAVING_TYPES.includes(fr.type)&&!(to&&SAVING_TYPES.includes(to.type)))r.savingsIn-=+t.amount;}
     if(t.type==="cc_payment")r.ccPay+=+t.amount;
-    if(t.type==="pawn_take")r.pawnIn+=+t.amount;if(t.type==="pawn_pay")r.pawnOut+=+t.amount;
+    if(t.type==="loan_take")r.loanIn+=+t.amount*txFx(t);if(t.type==="loan_pay")r.loanOut+=+t.amount*txFx(t);if(t.type==="pawn_take")r.pawnIn+=+t.amount;if(t.type==="pawn_pay")r.pawnOut+=+t.amount;
     if(t.type==="share_buy"&&!t.noCash)r.shareBuy+=+t.amount;if(t.type==="share_sell")r.shareSell+=+t.amount;if(t.type==="dividend"){r.dividends+=+t.amount;r.otherIncome+=+t.amount}
     if(t.type==="asset_buy")r.assetBuy+=+t.amount;if(t.type==="asset_sell")r.assetSell+=+t.amount;
     if(t.card&&(t.type==="cc_purchase"||t.type==="fuel"||t.type==="bill")&&!t.already)r.ccPurch+=+t.amount;
@@ -284,7 +308,8 @@ function fuelStats(id){const f=L().all.filter(t=>t.type==="fuel"&&t.vehicle===id
 /* Planner */
 function planner(){const c=cycle();const t0=today();const tt=totals(c.start,t0);
   const salaryRecv=tt.salary;const expected=+S.settings.expectedSalary||0;const salary=salaryRecv||expected;
-  const bills=billItems(c.start,c.end);const fixed=sum(bills.filter(i=>i.b.category!=="Loan"),i=>i.amount);const loans=sum(bills.filter(i=>i.b.category==="Loan"),i=>i.amount);
+  const bills=billItems(c.start,c.end);const fixed=sum(bills.filter(i=>i.b.category!=="Loan"),i=>i.amount);const activeLoans=(S.loans||[]).filter(l=>loanOutstanding(l)>0);const loans=sum(bills.filter(i=>i.b.category==="Loan"),i=>i.amount)+sum(activeLoans,l=>+l.instalment||0);
+  const loanLeft=sum(activeLoans.filter(l=>!loanTxs(l).some(t=>t.type==="loan_pay"&&t.date>=c.start)&&loanDue(l).due<c.next),l=>Math.min(+l.instalment||0,loanOutstanding(l)+loanOutstanding(l)*(+l.rate||0)/1200));
   let ccDue=0,ccDueLeft=0;for(const cd of S.cards){const st=cardStatus(cd);if(st.due>=c.start&&st.due<c.next){ccDue+=st.stmtBal;ccDueLeft+=st.amountDue}else if(st.amountDue>0&&st.due<c.start){ccDue+=st.amountDue;ccDueLeft+=st.amountDue}}
   const bud=S.budgets||{};const exp={Groceries:+bud.Groceries||0,Food:+bud.Food||0,Fuel:+bud.Fuel||0,Vehicle:+bud.Vehicle||0};
   const savingsPlan=+S.settings.plannedSavings||0;
@@ -301,9 +326,9 @@ function planner(){const c=cycle();const t0=today();const tt=totals(c.start,t0);
   let budLeft=0;for(const k of ["Groceries","Food","Fuel","Vehicle"])budLeft+=Math.max(0,exp[k]-(tt.byCat[k]||0));
   // card spend within cycle not yet paid is covered by ccDue of the next cycle; we only reserve what's due before next salary
   const pawnDue=sum((S.pawns||[]).filter(pw=>pawnOutstanding(pw)>0&&pw.dueDate&&pw.dueDate<c.next),pw=>pawnOutstanding(pw)+pawnAccrued(pw,pw.dueDate>t0?pw.dueDate:t0));
-  const cashCheck=liquid-unpaidBills-ccDueLeft-savingsLeft-budLeft-pawnDue;
+  const cashCheck=liquid-unpaidBills-ccDueLeft-savingsLeft-budLeft-pawnDue-loanLeft;
   const safe=cashCheck;
-  return{c,salary,salaryRecv,expected,fixed,loans,ccDue,ccDueLeft,savingsPlan,exp,available,dailyPlan:available/c.length,discretionary,overrun,remainingPlan,liquid,unpaidBills,savingsLeft,budLeft,pawnDue,cashCheck,safe,daily:safe/c.daysLeft}}
+  return{c,salary,salaryRecv,expected,fixed,loans,ccDue,ccDueLeft,savingsPlan,exp,available,dailyPlan:available/c.length,discretionary,overrun,remainingPlan,liquid,unpaidBills,savingsLeft,budLeft,pawnDue,loanLeft,cashCheck,safe,daily:safe/c.daysLeft}}
 
 /* ================= Charts (SVG) ================= */
 function niceMax(v){if(v<=0)return 1;const p=Math.pow(10,Math.floor(Math.log10(v)));const n=v/p;return(n<=1?1:n<=2?2:n<=5?5:10)*p}
@@ -343,14 +368,15 @@ function go(v){UI.view=v;render();window.scrollTo(0,0)}
 const head=(title,sub,btns)=>`<div class="topline"><div><h1>${title}</h1>${sub?`<p class="muted" style="margin-top:4px">${sub}</p>`:""}</div><div style="display:flex;gap:8px;flex-wrap:wrap">${btns||""}</div></div>`;
 const monthPicker=(key,val)=>`<select class="btn" data-change="${key}" aria-label="Month">${lastMonths(18).reverse().map(m=>`<option value="${m}" ${m===val?"selected":""}>${monthName(m)}</option>`).join("")}</select>`;
 
-function txTitle(t){if(t.type==="pawn_take")return"Pawned "+((pawn(t.pawnId)||{}).items||"gold");if(t.type==="pawn_pay"){const pw=pawn(t.pawnId);return(t.redeemed?"Redeemed ":"Pawning payment, ")+((pw&&pw.items)||"gold")}if(t.stockId){const st=stock(t.stockId),sym=st?st.symbol:"shares";if(t.type==="share_buy")return`Bought ${fq(t.qty)} ${sym}`;if(t.type==="share_sell")return`Sold ${fq(t.qty)} ${sym}`;if(t.type==="dividend")return"Dividend, "+sym;if(t.type==="share_adjust")return`${+t.qty>=0?"+":""}${fq(t.qty)} ${sym} shares`}if(t.type==="asset_buy")return"Bought "+((asset(t.assetId)||{}).name||"asset");if(t.type==="asset_sell")return"Sold "+((asset(t.assetId)||{}).name||"asset");if(t.type==="transfer")return t.kind||"Transfer";if(t.type==="cc_payment")return"Payment to "+cardLabel(card(t.card));if(t.type==="bill"){const b=bill(t.billId);return(b?b.name:t.desc)||"Bill"}
+function txTitle(t){if(t.type==="loan_take")return"Loan received, "+((loan(t.loanId)||{}).name||"loan");if(t.type==="loan_pay")return(t.paidOff?"Paid off ":"Loan payment, ")+((loan(t.loanId)||{}).name||"loan");if(t.type==="pawn_take")return"Pawned "+((pawn(t.pawnId)||{}).items||"gold");if(t.type==="pawn_pay"){const pw=pawn(t.pawnId);return(t.redeemed?"Redeemed ":"Pawning payment, ")+((pw&&pw.items)||"gold")}if(t.stockId){const st=stock(t.stockId),sym=st?st.symbol:"shares";if(t.type==="share_buy")return`Bought ${fq(t.qty)} ${sym}`;if(t.type==="share_sell")return`Sold ${fq(t.qty)} ${sym}`;if(t.type==="dividend")return"Dividend, "+sym;if(t.type==="share_adjust")return`${+t.qty>=0?"+":""}${fq(t.qty)} ${sym} shares`}if(t.type==="asset_buy")return"Bought "+((asset(t.assetId)||{}).name||"asset");if(t.type==="asset_sell")return"Sold "+((asset(t.assetId)||{}).name||"asset");if(t.type==="transfer")return t.kind||"Transfer";if(t.type==="cc_payment")return"Payment to "+cardLabel(card(t.card));if(t.type==="bill"){const b=bill(t.billId);return(b?b.name:t.desc)||"Bill"}
   if(t.type==="fuel")return(t.merchant||"Fuel")+(t.litres?", "+(+t.litres).toFixed(1)+" L":"");if(t.type==="income")return t.desc||t.sub||"Income";return t.merchant||t.desc||t.sub||t.cat}
-function txMeta(t){const parts=[];if(t.pawnId){const pw=pawn(t.pawnId);if(pw&&pw.lender)parts.push(pw.lender);if(t.type==="pawn_pay"){if(+t.interest)parts.push(`interest ${rs0(t.interest)}`);if(+t.principalPaid)parts.push(`loan ${rs0(t.principalPaid)}`)}else if(t.fee)parts.push(`fees ${rs0(t.fee)}`);if(t.acct)parts.push(acctLabel(acct(t.acct)));return parts.join(", ")}if(t.stockId){const st=stock(t.stockId);if(t.type==="share_buy"||t.type==="share_sell"){parts.push(`at ${rs(t.price,true)}`);if(t.fee)parts.push(`fees ${rs(t.fee)}`)}if(t.type==="share_adjust")parts.push(t.desc||"Bonus or split");if(t.type==="dividend"&&t.wht)parts.push(`tax withheld ${rs(t.wht)}`);if(t.noCash)parts.push("already owned");else if(t.acct)parts.push(acctLabel(acct(t.acct)));if(st&&st.name&&t.type!=="dividend")parts.push(st.name);return parts.join(", ")}if(t.type==="asset_buy"||t.type==="asset_sell"){const a=asset(t.assetId);parts.push(a?a.category:"Asset");if(t.card)parts.push(cardLabel(card(t.card)));else if(t.acct)parts.push(acctLabel(acct(t.acct)));if(t.countSpend)parts.push("counted as spending");return parts.join(", ")}if(t.type==="transfer")parts.push(acctLabel(acct(t.acct))+" to "+acctLabel(acct(t.toAcct)));
+function txMeta(t){const parts=[];if(t.loanId){const l=loan(t.loanId);if(l&&l.lender)parts.push(l.lender);if(t.type==="loan_pay"){if(+t.interest)parts.push(`interest ${rs0(t.interest)}`);if(+t.principalPaid)parts.push(`principal ${rs0(t.principalPaid)}`)}else if(t.fee)parts.push(`fees ${rs0(t.fee)}`);if(t.acct)parts.push(acctLabel(acct(t.acct)));return parts.join(", ")}if(t.pawnId){const pw=pawn(t.pawnId);if(pw&&pw.lender)parts.push(pw.lender);if(t.type==="pawn_pay"){if(+t.interest)parts.push(`interest ${rs0(t.interest)}`);if(+t.principalPaid)parts.push(`loan ${rs0(t.principalPaid)}`)}else if(t.fee)parts.push(`fees ${rs0(t.fee)}`);if(t.acct)parts.push(acctLabel(acct(t.acct)));return parts.join(", ")}if(t.stockId){const st=stock(t.stockId);if(t.type==="share_buy"||t.type==="share_sell"){parts.push(`at ${rs(t.price,true)}`);if(t.fee)parts.push(`fees ${rs(t.fee)}`)}if(t.type==="share_adjust")parts.push(t.desc||"Bonus or split");if(t.type==="dividend"&&t.wht)parts.push(`tax withheld ${rs(t.wht)}`);if(t.noCash)parts.push("already owned");else if(t.acct)parts.push(acctLabel(acct(t.acct)));if(st&&st.name&&t.type!=="dividend")parts.push(st.name);return parts.join(", ")}if(t.type==="asset_buy"||t.type==="asset_sell"){const a=asset(t.assetId);parts.push(a?a.category:"Asset");if(t.card)parts.push(cardLabel(card(t.card)));else if(t.acct)parts.push(acctLabel(acct(t.acct)));if(t.countSpend)parts.push("counted as spending");return parts.join(", ")}if(t.type==="transfer")parts.push(acctLabel(acct(t.acct))+" to "+acctLabel(acct(t.toAcct)));
   else if(t.type==="cc_payment")parts.push("from "+acctLabel(acct(t.acct)));
   else{if(t.type==="fuel")parts.push("Fuel");else if(t.type!=="income")parts.push(t.cat+(t.sub?" / "+t.sub:""));if(t.card)parts.push(cardLabel(card(t.card)));else if(t.acct)parts.push(acctLabel(acct(t.acct)))}
   if(t.vehicle){const v=veh(t.vehicle);if(v)parts.push(v.name)}if(t.already)parts.push("marked paid");return parts.join(", ")}
-function txGlyph(t){if(t.type==="pawn_take"||t.type==="pawn_pay")return["gl-card","Pw"];if(t.type==="dividend")return["gl-inc","Dv"];if(t.type&&t.type.startsWith("share_"))return["gl-asset","Sh"];if(t.type==="asset_buy"||t.type==="asset_sell")return["gl-asset","As"];if(t.type==="income")return["gl-inc","In"];if(t.type==="transfer"||t.type==="cc_payment")return["gl-xfer","⇄"];if(t.type==="refund")return["gl-ref","Rf"];if(t.card)return["gl-card","CC"];if(t.type==="fuel")return["gl-exp","F"];if(t.type==="bill")return["gl-exp","B"];return["gl-exp",(t.cat||"?").slice(0,2)]}
-function txAmount(t){const a=+t.amount;if(t.type==="pawn_take")return`<span class="num xfer">+${rs(a)}</span>`;if(t.type==="pawn_pay")return`<span class="num xfer">−${rs(a)}</span>`;if(t.type==="dividend")return`<span class="num pos">+${rs(a)}</span>`;if(t.type==="share_adjust")return`<span class="num faint">${+t.qty>=0?"+":""}${fq(t.qty)} sh</span>`;if(t.type==="share_sell")return`<span class="num xfer">+${rs(a)}</span>`;if(t.type==="share_buy")return`<span class="num ${t.noCash?"faint":"xfer"}">−${rs(a)}</span>`;if(t.type==="asset_sell")return`<span class="num xfer">+${rs(a)}</span>`;if(t.type==="asset_buy"&&!t.countSpend)return`<span class="num xfer">−${rs(a)}</span>`;if(t.type==="income")return`<span class="num pos">+${rs(a)}</span>`;if(t.type==="refund")return`<span class="num pos">+${rs(a)}</span>`;if(t.type==="transfer"||t.type==="cc_payment")return`<span class="num xfer">${rs(a)}</span>`;if(t.already)return`<span class="num faint">${rs(a)}</span>`;return`<span class="num">−${rs(a)}</span>`}
+function txGlyph(t){if(t.type==="loan_take"||t.type==="loan_pay")return["gl-card","Ln"];if(t.type==="pawn_take"||t.type==="pawn_pay")return["gl-card","Pw"];if(t.type==="dividend")return["gl-inc","Dv"];if(t.type&&t.type.startsWith("share_"))return["gl-asset","Sh"];if(t.type==="asset_buy"||t.type==="asset_sell")return["gl-asset","As"];if(t.type==="income")return["gl-inc","In"];if(t.type==="transfer"||t.type==="cc_payment")return["gl-xfer","⇄"];if(t.type==="refund")return["gl-ref","Rf"];if(t.card)return["gl-card","CC"];if(t.type==="fuel")return["gl-exp","F"];if(t.type==="bill")return["gl-exp","B"];return["gl-exp",(t.cat||"?").slice(0,2)]}
+function txAmount(t){const a=+t.amount;if(!t.cur&&t.type==="loan_take")return`<span class="num xfer">+${rs(a)}</span>`;if(!t.cur&&t.type==="loan_pay")return`<span class="num xfer">−${rs(a)}</span>`;if(t.cur&&t.cur!=="LKR"){const plus=["income","refund","asset_sell","share_sell","dividend","pawn_take","loan_take"].includes(t.type),mv=["transfer","cc_payment","loan_pay","pawn_pay","share_buy","asset_buy"].includes(t.type);
+    return`<span class="num ${plus?"pos":mv?"xfer":""}" style="text-align:right">${plus?"+":mv?"":"−"}${fmtCur(a,t.cur)}<span class="faint small" style="display:block">${rs0(t.lkr!=null?t.lkr:a*rateFor(t.cur))}</span></span>`}if(t.type==="pawn_take")return`<span class="num xfer">+${rs(a)}</span>`;if(t.type==="pawn_pay")return`<span class="num xfer">−${rs(a)}</span>`;if(t.type==="dividend")return`<span class="num pos">+${rs(a)}</span>`;if(t.type==="share_adjust")return`<span class="num faint">${+t.qty>=0?"+":""}${fq(t.qty)} sh</span>`;if(t.type==="share_sell")return`<span class="num xfer">+${rs(a)}</span>`;if(t.type==="share_buy")return`<span class="num ${t.noCash?"faint":"xfer"}">−${rs(a)}</span>`;if(t.type==="asset_sell")return`<span class="num xfer">+${rs(a)}</span>`;if(t.type==="asset_buy"&&!t.countSpend)return`<span class="num xfer">−${rs(a)}</span>`;if(t.type==="income")return`<span class="num pos">+${rs(a)}</span>`;if(t.type==="refund")return`<span class="num pos">+${rs(a)}</span>`;if(t.type==="transfer"||t.type==="cc_payment")return`<span class="num xfer">${rs(a)}</span>`;if(t.already)return`<span class="num faint">${rs(a)}</span>`;return`<span class="num">−${rs(a)}</span>`}
 function txRow(t){const [c,g]=txGlyph(t);return`<div class="row click" data-act="tx" data-id="${t.id}" tabindex="0"><div class="glyph ${c}">${esc(g)}</div><div class="grow"><div class="t">${esc(txTitle(t))}</div><div class="s">${esc(txMeta(t))}</div></div>${txAmount(t)}${t.receipt?'<span class="faint small" title="Has receipt">📎</span>':""}</div>`}
 function txList(list,grouped){if(!list.length)return`<div class="empty"><b>No transactions here yet</b>Use + Add Transaction to record one. It takes a few seconds.</div>`;
   if(!grouped)return`<div class="rows">${list.map(txRow).join("")}</div>`;let out="",d="";for(const t of list){if(t.date!==d){d=t.date;out+=`<div class="dayhead">${fday(d)}</div>`}out+=txRow(t)}return`<div class="rows">${out}</div>`}
@@ -359,7 +385,7 @@ function txList(list,grouped){if(!list.length)return`<div class="empty"><b>No tr
 function vDashboard(){
   if(!S.accounts.some(a=>a.type!=="Cash")&&!L().all.length)return vWelcome();
   const k=mkey(today());const [f,t]=monthRange(k);const T=totals(f,t);const P=planner();
-  let bank=0;for(const a of S.accounts)if(isLKR(a))bank+=acctBal(a.id);
+  let bank=0;for(const a of S.accounts)bank+=acctBal(a.id)*rateFor(a.currency);const foreign=S.accounts.filter(a=>!isLKR(a));
   const cardOutTot=sum(S.cards,c=>cardOut(c.id));
   const cardSt=S.cards.map(c=>({c,st:cardStatus(c)}));
   const upB=upcomingBills().filter(i=>!i.paid).slice(0,6);
@@ -389,9 +415,9 @@ function vDashboard(){
     <div class="stat"><span>Spending this month</span><b>${rs0(T.spend)}</b><em>Transfers not counted</em></div>
     <div class="stat"><span>Remaining</span><b class="${T.income-T.spend<0?"neg":""}">${rs0(T.income-T.spend)}</b><em>Income minus spending</em></div>
     <div class="stat"><span>Moved to savings</span><b>${rs0(T.savingsIn)}</b><em>This month</em></div>
-    <div class="stat"><span>Bank & cash balance</span><b>${rs0(bank)}</b><em>${S.accounts.length} accounts</em></div>
+    <div class="stat"><span>Bank & cash balance</span><b>${rs0(bank)}</b><em>${foreign.length?"incl. "+foreign.map(a=>fmtCur(acctBal(a.id),a.currency)).join(", "):S.accounts.length+" accounts"}</em></div>
     <div class="stat"><span>Card outstanding</span><b class="${cardOutTot>0?"neg":""}">${rs0(cardOutTot)}</b><em>${S.cards.length} cards</em></div>
-    <div class="stat"><span>Net worth</span><b class="${netWorth()<0?"neg":""}">${rs0(netWorth())}</b><em>${(S.assets||[]).length?"Money and assets, minus card debt":"Add assets to include them"}</em></div>${(S.pawns||[]).some(pw=>pawnOutstanding(pw)>0)?(()=>{const act=(S.pawns||[]).filter(pw=>pawnOutstanding(pw)>0).sort((a,b)=>(a.dueDate||"9")<(b.dueDate||"9")?-1:1);const st=pawnStatus(act[0]);return`<div class="stat"><span>Pawning owed</span><b class="neg">${rs0(pawnsOwed())}</b><em>${act[0].dueDate?(st.cls==="b-over"?"Overdue since ":"Next due ")+fdate(act[0].dueDate,{day:"numeric",month:"short"}):act.length+" active"}</em></div>`})():""}
+    <div class="stat"><span>Net worth</span><b class="${netWorth()<0?"neg":""}">${rs0(netWorth())}</b><em>${(S.assets||[]).length?"Money and assets, minus card debt":"Add assets to include them"}</em></div>${(S.loans||[]).some(l=>loanOutstanding(l)>0)?(()=>{const act=(S.loans||[]).filter(l=>loanOutstanding(l)>0).sort((a,b)=>loanDue(a).due<loanDue(b).due?-1:1);return`<div class="stat"><span>Loans owed</span><b class="neg">${rs0(loansOwed())}</b><em>Next instalment ${fdate(loanDue(act[0]).due,{day:"numeric",month:"short"})}</em></div>`})():""}${(S.pawns||[]).some(pw=>pawnOutstanding(pw)>0)?(()=>{const act=(S.pawns||[]).filter(pw=>pawnOutstanding(pw)>0).sort((a,b)=>(a.dueDate||"9")<(b.dueDate||"9")?-1:1);const st=pawnStatus(act[0]);return`<div class="stat"><span>Pawning owed</span><b class="neg">${rs0(pawnsOwed())}</b><em>${act[0].dueDate?(st.cls==="b-over"?"Overdue since ":"Next due ")+fdate(act[0].dueDate,{day:"numeric",month:"short"}):act.length+" active"}</em></div>`})():""}
   </div>
   <div class="section stats">${["Groceries","Food","Fuel","Vehicle"].map(catTile).join("")}</div>
   <div class="section grid g2">
@@ -407,7 +433,7 @@ function vDashboard(){
     <div class="panel"><div class="panel-head"><h2>Spending by category</h2><span class="faint small">${monthName(k)}</span></div>${hbars(catItems,{empty:"No spending recorded this month."})}</div>
   </div>
   <div class="section grid g3">
-    <div class="panel"><h2 style="margin-bottom:12px">Account balances</h2>${hbars(S.accounts.map(a=>({label:a.name,value:acctBal(a.id),text:(isLKR(a)?"":a.currency+" ")+rs0(acctBal(a.id)).replace(isLKR(a)?"":"Rs. ","")})),{empty:"Add a bank account to begin."})}</div>
+    <div class="panel"><h2 style="margin-bottom:12px">Account balances</h2>${hbars(S.accounts.map(a=>({label:a.name,value:acctBal(a.id)*(rateFor(a.currency)||1),text:isLKR(a)?rs0(acctBal(a.id)):fmtCur(acctBal(a.id),a.currency)})),{empty:"Add a bank account to begin."})}</div>
     <div class="panel"><h2 style="margin-bottom:12px">Credit card balances</h2>${hbars(cardSt.map(({c,st})=>({label:c.name,value:st.outstanding,max:st.limit||st.outstanding,color:st.limit&&st.outstanding/st.limit>.75?"var(--clay)":"var(--saffron)",text:rs0(st.outstanding)+(st.limit?` of ${short(st.limit)}`:"")})),{empty:"No card balances."})}</div>
     <div class="panel"><h2 style="margin-bottom:12px">Vehicle spending</h2>${hbars(S.vehicles.map(v=>({label:v.name,value:vehCosts(v.id,f,t).total})),{empty:S.vehicles.length?"No vehicle costs this month.":"Add a vehicle to track its costs."})}</div>
   </div>
@@ -448,7 +474,7 @@ function vSalary(){const P=planner();const inc=L().all.filter(t=>t.type==="incom
       </div>
       <div class="formula" style="margin-top:16px">
         <div><span>Money in spendable accounts</span><span class="num">${rs0(P.liquid)}</span></div>
-        ${line("Unpaid bills before salary",P.unpaidBills)}${line("Card payments due before salary",P.ccDueLeft)}${P.pawnDue?line("Pawning to settle before salary",P.pawnDue):""}${line("Savings still to move",P.savingsLeft)}${line("Grocery, food, fuel and vehicle budget left",P.budLeft)}
+        ${line("Unpaid bills before salary",P.unpaidBills)}${line("Card payments due before salary",P.ccDueLeft)}${P.pawnDue?line("Pawning to settle before salary",P.pawnDue):""}${P.loanLeft?line("Loan instalments still to pay",P.loanLeft):""}${line("Savings still to move",P.savingsLeft)}${line("Grocery, food, fuel and vehicle budget left",P.budLeft)}
         <div class="eq"><span>Cash check</span><span class="num ${P.cashCheck<0?"neg":""}">${rs0(P.cashCheck)}</span></div>
       </div>
       <p style="margin-top:12px">Safe to spend until salary is the cash check: <b class="num">${rs0(P.safe)}</b>, which is <b class="num">${rs0(P.daily)}</b> a day. This is the figure on your dashboard.</p>
@@ -504,7 +530,7 @@ function vAccounts(){const k=mkey(today());const [f,t]=monthRange(k);
   return`${head("Bank accounts",`Total ${rs0(tot)} across ${rows.length} accounts`,`<button class="btn" data-act="add" data-type="transfer">Transfer</button><button class="btn primary" data-act="edit-account">Add account</button>`)}
   <div class="grid g2">${rows.map(({a,bal,inn,out})=>`<div class="panel"><div class="panel-head"><div><h2>${esc(a.name)}</h2><p class="faint small">${esc([a.bank,a.type,a.nick].filter(Boolean).join(", "))}</p></div><button class="btn sm" data-act="edit-account" data-id="${a.id}">Edit</button></div>
     <div style="font:800 1.9rem var(--display)" class="num ${bal<0?"neg":""}">${isLKR(a)?rs0(bal):esc(a.currency)+" "+nf2.format(bal)}</div>
-    <div class="stats" style="margin-top:12px"><div class="stat"><span>In this month</span><b class="pos">${rs0(inn)}</b></div><div class="stat"><span>Out this month</span><b>${rs0(out)}</b></div></div>
+    <div class="stats" style="margin-top:12px"><div class="stat"><span>In this month</span><b class="pos">${isLKR(a)?rs0(inn):fmtCur(inn,a.currency)}</b></div><div class="stat"><span>Out this month</span><b>${isLKR(a)?rs0(out):fmtCur(out,a.currency)}</b></div>${isLKR(a)?"":`<div class="stat"><span>In rupees</span><b>${rs0(bal*rateFor(a.currency))}</b><em>at 1 ${a.currency} = Rs. ${rateFor(a.currency)||"?"}</em></div>`}</div>
     <div class="actions" style="justify-content:flex-start;margin-top:10px"><button class="btn sm ghost" data-act="filter-acct" data-id="${a.id}">View transactions</button></div></div>`).join("")}</div>`}
 
 /* ---------- Cards ---------- */
@@ -600,6 +626,8 @@ function vReports(){const k=UI.reportMonth;const [f,t]=monthRange(k);const T=tot
     if(x.type==="dividend"&&lkIds.has(x.acct))CF.other+=+x.amount;
     else if(x.type==="share_buy"&&!x.noCash&&lkIds.has(x.acct))CF.shareBuy=(CF.shareBuy||0)+(+x.amount);
     else if(x.type==="share_sell"&&lkIds.has(x.acct))CF.shareSell=(CF.shareSell||0)+(+x.amount);
+    else if(x.type==="loan_take"&&lkIds.has(x.acct))CF.loanIn=(CF.loanIn||0)+(+x.amount);
+    else if(x.type==="loan_pay"&&lkIds.has(x.acct))CF.loanOut=(CF.loanOut||0)+(+x.amount);
     else if(x.type==="pawn_take"&&lkIds.has(x.acct))CF.pawnIn=(CF.pawnIn||0)+(+x.amount);
     else if(x.type==="pawn_pay"&&lkIds.has(x.acct))CF.pawnOut=(CF.pawnOut||0)+(+x.amount);
     else if(x.type==="income"&&lkIds.has(x.acct)){if(x.sub==="Salary")CF.salary+=+x.amount;else CF.other+=+x.amount}
@@ -621,10 +649,10 @@ function vReports(){const k=UI.reportMonth;const [f,t]=monthRange(k);const T=tot
     <div class="eq"><span>Remaining (income minus spending)</span><span class="num ${T.income-T.spend<0?"neg":""}">${rs0(T.income-T.spend)}</span></div></div>
     <p class="hint" style="margin-top:8px">Transfers between your accounts (${rs0(T.transfers)}) and card repayments (${rs0(T.ccPay)}) are excluded from spending.${T.assetBuy?` So are asset purchases (${rs0(T.assetBuy)}), unless you chose to count them.`:""}</p></div>
   <div class="panel"><h2 style="margin-bottom:10px">Cash flow</h2><div class="formula">
-    <div><span>Opening bank & cash balance</span><span class="num">${rs0(CF.open)}</span></div>${cf("Salary",CF.salary,"+")}${cf("Other income",CF.other,"+")}${cf("Refunds",CF.refunds,"+")}${cf("Cash expenses",CF.cashExp,"−")}${cf("Bank-paid expenses and fees",CF.bankExp,"−")}${cf("Bill payments",CF.bills,"−")}${cf("Transfers out (incl. card payments)",CF.xout,"−")}${cf("Transfers in",CF.xin,"+")}${CF.assetBuy?cf("Asset purchases",CF.assetBuy,"−"):""}${CF.assetSell?cf("Asset sales",CF.assetSell,"+"):""}${CF.shareBuy?cf("Share purchases",CF.shareBuy,"−"):""}${CF.shareSell?cf("Share sales",CF.shareSell,"+"):""}${CF.pawnIn?cf("Pawning loans received",CF.pawnIn,"+"):""}${CF.pawnOut?cf("Pawning payments",CF.pawnOut,"−"):""}
+    <div><span>Opening bank & cash balance</span><span class="num">${rs0(CF.open)}</span></div>${cf("Salary",CF.salary,"+")}${cf("Other income",CF.other,"+")}${cf("Refunds",CF.refunds,"+")}${cf("Cash expenses",CF.cashExp,"−")}${cf("Bank-paid expenses and fees",CF.bankExp,"−")}${cf("Bill payments",CF.bills,"−")}${cf("Transfers out (incl. card payments)",CF.xout,"−")}${cf("Transfers in",CF.xin,"+")}${CF.assetBuy?cf("Asset purchases",CF.assetBuy,"−"):""}${CF.assetSell?cf("Asset sales",CF.assetSell,"+"):""}${CF.shareBuy?cf("Share purchases",CF.shareBuy,"−"):""}${CF.shareSell?cf("Share sales",CF.shareSell,"+"):""}${CF.loanIn?cf("Loans received",CF.loanIn,"+"):""}${CF.loanOut?cf("Loan payments",CF.loanOut,"−"):""}${CF.pawnIn?cf("Pawning loans received",CF.pawnIn,"+"):""}${CF.pawnOut?cf("Pawning payments",CF.pawnOut,"−"):""}
     <div class="eq"><span>Closing balance</span><span class="num">${rs0(CF.close)}</span></div></div>
     <p class="hint" style="margin-top:8px">Card purchases don't touch your bank until you pay the card, so they appear here as card payments, and in spending when you bought.</p></div></div>
-  <div class="section panel"><h2 style="margin-bottom:10px">Bank accounts</h2><div class="table-wrap"><table><thead><tr><th>Account</th><th class="r">Opening</th><th class="r">Money in</th><th class="r">Money out</th><th class="r">Transfers in</th><th class="r">Transfers out</th><th class="r">Closing</th></tr></thead><tbody>${accRows.map(r=>`<tr><td>${esc(acctLabel(r.a))}</td><td class="r num">${rs0(r.open)}</td><td class="r num">${rs0(r.inn)}</td><td class="r num">${rs0(r.out)}</td><td class="r num">${rs0(r.xi)}</td><td class="r num">${rs0(r.xo)}</td><td class="r num"><b>${rs0(r.close)}</b></td></tr>`).join("")}</tbody></table></div></div>
+  <div class="section panel"><h2 style="margin-bottom:10px">Bank accounts</h2><div class="table-wrap"><table><thead><tr><th>Account</th><th class="r">Opening</th><th class="r">Money in</th><th class="r">Money out</th><th class="r">Transfers in</th><th class="r">Transfers out</th><th class="r">Closing</th></tr></thead><tbody>${accRows.map(r=>`<tr><td>${esc(acctLabel(r.a))}</td><td class="r num">${isLKR(r.a)?rs0(r.open):fmtCur(r.open,r.a.currency)}</td><td class="r num">${isLKR(r.a)?rs0(r.inn):fmtCur(r.inn,r.a.currency)}</td><td class="r num">${isLKR(r.a)?rs0(r.out):fmtCur(r.out,r.a.currency)}</td><td class="r num">${isLKR(r.a)?rs0(r.xi):fmtCur(r.xi,r.a.currency)}</td><td class="r num">${isLKR(r.a)?rs0(r.xo):fmtCur(r.xo,r.a.currency)}</td><td class="r num"><b>${isLKR(r.a)?rs0(r.close):fmtCur(r.close,r.a.currency)}</b></td></tr>`).join("")}</tbody></table></div></div>
   <div class="section panel"><h2 style="margin-bottom:10px">Credit cards</h2>${cardRows.length?`<div class="table-wrap"><table><thead><tr><th>Card</th><th class="r">Purchases</th><th class="r">Payments</th><th class="r">Outstanding at month end</th><th class="r">Available credit</th></tr></thead><tbody>${cardRows.map(r=>`<tr><td>${esc(r.c.name)}</td><td class="r num">${rs0(r.p)}</td><td class="r num">${rs0(r.pay)}</td><td class="r num">${rs0(r.o)}</td><td class="r num">${rs0(r.av)}</td></tr>`).join("")}<tr class="total"><td>Total</td><td class="r num">${rs0(sum(cardRows,r=>r.p))}</td><td class="r num">${rs0(sum(cardRows,r=>r.pay))}</td><td class="r num">${rs0(sum(cardRows,r=>r.o))}</td><td class="r num">${rs0(sum(cardRows,r=>r.av))}</td></tr></tbody></table></div>`:`<p class="faint small">No cards.</p>`}</div>
   <div class="section grid g2"><div class="panel"><h2 style="margin-bottom:10px">Vehicles</h2>${S.vehicles.length?`<div class="table-wrap"><table><thead><tr><th>Vehicle</th><th class="r">Fuel</th><th class="r">Repairs & maintenance</th><th class="r">Insurance</th><th class="r">Other</th><th class="r">Total</th></tr></thead><tbody>${S.vehicles.map(v=>{const c=vehCosts(v.id,f,t);return`<tr><td>${esc(v.name)}</td><td class="r num">${rs0(c.fuel)}</td><td class="r num">${rs0(c.maint)}</td><td class="r num">${rs0(c.ins)}</td><td class="r num">${rs0(c.loan+c.other)}</td><td class="r num"><b>${rs0(c.total)}</b></td></tr>`}).join("")}</tbody></table></div>`:`<p class="faint small">No vehicles.</p>`}</div>
   <div class="panel"><h2 style="margin-bottom:10px">Spending categories</h2>${hbars(catRows.map(r=>({label:r.c,value:r.v})),{keepZero:true})}</div></div>`}
@@ -644,6 +672,7 @@ function vSettings(){const n=L().all.length;
     <div class="actions" style="justify-content:flex-start;margin-top:12px"><button class="btn" data-act="demo">Load example data</button><button class="btn danger" data-act="wipe">Delete all data</button></div>
     <div class="actions" style="justify-content:flex-start;margin-top:12px"><button class="btn" data-act="logout">Sign out</button><button class="btn" data-act="chpw">Change password</button><button class="btn danger" data-act="delacct">Delete account</button></div>
     <input type="file" id="importFile" accept="application/json,.json" hidden></div></div>
+  ${(()=>{const curs=[...new Set(S.accounts.filter(a=>!isLKR(a)).map(a=>a.currency))];return curs.length?`<div class="section panel"><h2 style="margin-bottom:8px">Exchange rates</h2><form class="f" data-form="rates"><div class="fr">${curs.map(c=>fld(`1 ${c} = Rs.`,`<input type="number" name="r_${c}" step="0.0001" min="0" inputmode="decimal" value="${rateFor(c)||""}" required>`)).join("")}</div><p class="hint">Used for totals, net worth and new transactions. Transactions you've already saved keep the rate from the day you saved them.</p><div class="actions"><button class="btn primary">Save rates</button></div></form></div>`:""})()}
   <div class="section grid g2"><div class="panel"><h2 style="margin-bottom:8px">Recovery key</h2>
     <p class="muted" style="margin-bottom:12px">${ME.hasRecovery?"You have a recovery key. If you've lost it, create a new one; the old one stops working.":"You don't have a recovery key yet. Without one, a forgotten password means losing access to your data."}</p>
     <button class="btn ${ME.hasRecovery?"":"primary"}" data-act="newkey">${ME.hasRecovery?"Create a new recovery key":"Create a recovery key"}</button></div>
@@ -654,6 +683,7 @@ function vSettings(){const n=L().all.length;
     <p>Card purchases are spending on the day you buy. Paying the card from your bank moves money, so it's never counted again.</p>
     <p>Transfers between your own accounts, into savings and back out of savings are never income or spending. A transfer fee is counted as a bank charge.</p>
     <p>A bill payment is spending, unless you mark it as already recorded, in which case it only marks the bill paid.</p>
+    <p>A loan you take is money you owe, not income. Each instalment is split into interest, which counts as spending, and principal, which reduces what you owe.</p>
     <p>Money from pawning is a loan, so it isn't income; it adds to the account it went into and shows as a debt. When you pay it back, only the interest (and any fees) count as spending.</p>
     <p>Buying shares isn't spending and selling them isn't income; Kasi tracks your gain or loss on each holding using average cost. Dividends are income.</p>
     <p>Buying an asset such as land, gold or a laptop moves money into something you own, so it isn't spending unless you choose to count it. Selling an asset isn't income.</p>
@@ -663,13 +693,13 @@ function vSettings(){const n=L().all.length;
 function vAssets(){const t0=today();const all=S.assets||[];const held=all.filter(a=>!a.sold),sold=all.filter(a=>a.sold);
   const val=sum(held,a=>assetValue(a)),cost=sum(held,a=>assetCost(a));const known=held.filter(a=>assetCost(a)>0);
   const gain=sum(known,a=>assetValue(a)-assetCost(a)),gainBase=sum(known,a=>assetCost(a));
-  let cash=0;for(const a of S.accounts)if(isLKR(a))cash+=acctBal(a.id);const pawnDebt=pawnsOwed();const debt=sum(S.cards,c=>cardOut(c.id))+pawnDebt;const shv=portfolioValue();const nw=cash+val+shv-debt;
+  let cash=0;for(const a of S.accounts)cash+=acctBal(a.id)*rateFor(a.currency);const pawnDebt=pawnsOwed()+loansOwed();const debt=sum(S.cards,c=>cardOut(c.id))+pawnDebt;const shv=portfolioValue();const nw=cash+val+shv-debt;
   const m12=lastMonths(12);const nwT=m12.map(m=>{const e=monthRange(m)[1];return netWorth(e>t0?t0:e)});
   const byCat={};for(const a of held)byCat[a.category]=(byCat[a.category]||0)+assetValue(a);if(shv)byCat["Shares & unit trusts"]=(byCat["Shares & unit trusts"]||0)+shv;
   const row=a=>{const v=a.sold?+a.sold.amount:assetValue(a),c=assetCost(a);const ch=c>0?(v-c)/c*100:null;
     return`<div class="row click" data-act="asset" data-id="${a.id}" tabindex="0"><div class="glyph gl-asset">${esc((a.category||"As").slice(0,2))}</div><div class="grow"><div class="t">${esc(a.name)}</div><div class="s">${esc(a.category)}${c>0?`, paid ${rs0(c)}`:""}${(S.pawns||[]).some(pw=>pw.assetId===a.id&&pawnOutstanding(pw)>0)?", pledged for pawning":""}${a.sold?`, sold ${fdate(a.sold.date)}`:""}</div></div>${ch===null?"":`<span class="badge ${ch>=0?"b-paid":"b-over"}">${ch>=0?"+":"−"}${Math.abs(ch).toFixed(Math.abs(ch)<10?1:0)}%</span>`}<span class="num"><b>${rs0(v)}</b></span></div>`};
   return`${head("Assets",`Net worth ${rs0(nw)}`,`<button class="btn" data-act="edit-asset">Add an asset you own</button><button class="btn primary" data-act="add" data-type="asset_buy">Record a purchase</button>`)}
-  <div class="stats"><div class="stat"><span>Net worth</span><b class="${nw<0?"neg":""}">${rs0(nw)}</b><em>Money and assets, minus card debt</em></div><div class="stat"><span>Assets value</span><b>${rs0(val+shv)}</b><em>${held.length} asset${held.length===1?"":"s"}${shv?", plus shares":""}</em></div><div class="stat"><span>Bank & cash</span><b>${rs0(cash)}</b></div><div class="stat"><span>Debts</span><b class="${debt>0?"neg":""}">${rs0(debt)}</b><em>${pawnDebt?`Cards ${rs0(debt-pawnDebt)}, pawning ${rs0(pawnDebt)}`:"Credit cards"}</em></div><div class="stat"><span>Paid for assets</span><b>${rs0(cost)}</b></div><div class="stat"><span>Gain or loss</span><b class="${gain<0?"neg":"pos"}">${gain<0?"":"+"}${rs0(gain)}</b><em>${gainBase?`${(gain/gainBase*100).toFixed(1)}% on what you paid`:"Add what you paid to see this"}</em></div></div>
+  <div class="stats"><div class="stat"><span>Net worth</span><b class="${nw<0?"neg":""}">${rs0(nw)}</b><em>Money and assets, minus card debt</em></div><div class="stat"><span>Assets value</span><b>${rs0(val+shv)}</b><em>${held.length} asset${held.length===1?"":"s"}${shv?", plus shares":""}</em></div><div class="stat"><span>Bank & cash</span><b>${rs0(cash)}</b></div><div class="stat"><span>Debts</span><b class="${debt>0?"neg":""}">${rs0(debt)}</b><em>${pawnDebt?`Cards ${rs0(debt-pawnDebt)}, loans and pawning ${rs0(pawnDebt)}`:"Credit cards"}</em></div><div class="stat"><span>Paid for assets</span><b>${rs0(cost)}</b></div><div class="stat"><span>Gain or loss</span><b class="${gain<0?"neg":"pos"}">${gain<0?"":"+"}${rs0(gain)}</b><em>${gainBase?`${(gain/gainBase*100).toFixed(1)}% on what you paid`:"Add what you paid to see this"}</em></div></div>
   <div class="section grid g2"><div class="panel"><div class="panel-head"><h2>Net worth</h2><span class="faint small">12 months</span></div>${lineChart(m12.map(m=>monthName(m,true)),[{name:"Net worth",color:"var(--tea)",values:nwT}])}</div>
   <div class="panel"><h2 style="margin-bottom:12px">By type</h2>${hbars(Object.entries(byCat).sort((a,b)=>b[1]-a[1]).map(([l,v])=>({label:l,value:v})),{empty:"No assets yet."})}</div></div>
   <div class="section panel"><h2 style="margin-bottom:6px">What you own</h2>${shv?`<div class="rows"><div class="row click" data-act="nav" data-v="shares" tabindex="0"><div class="glyph gl-asset">Sh</div><div class="grow"><div class="t">Share portfolio</div><div class="s">See holdings on the Shares page</div></div><span class="num"><b>${rs0(shv)}</b></span></div></div>`:""}${held.length?`<div class="rows">${held.slice().sort((a,b)=>assetValue(b)-assetValue(a)).map(row).join("")}</div>`:`<div class="empty"><b>No assets yet</b>Add land, a house, gold, shares or anything valuable you own, or record a purchase when you make one.</div>`}</div>
@@ -803,7 +833,91 @@ function savePawnPay(f){const fd=new FormData(f);const g=k=>(fd.get(k)??"").toSt
   const t={id:old?old.id:uid(),ts:old?old.ts:Date.now(),type:"pawn_pay",pawnId:pw.id,date:g("date")||today(),amount:Math.round((interest+pp)*100)/100,interest,principalPaid:pp,acct:g("acct"),method:"Bank Account",cat:"Bank charges",sub:"Pawning interest"};
   if(g("ref"))t.ref=g("ref");if(pp>=owed-0.005)t.redeemed=true;if(fd.get("renew")&&g("renewTo")){t.renewTo=g("renewTo");pw.dueDate=g("renewTo")}
   upsertTx(t,old);saveState();closeSheet();render();toast(t.redeemed?"Pawn redeemed. Your gold is back.":"Payment saved")}
-const VIEW_FN={dashboard:vDashboard,salary:vSalary,transactions:vTransactions,accounts:vAccounts,cards:vCards,bills:vBills,food:vFood,vehicles:vVehicles,fuel:vFuel,budget:vBudget,savings:vSavings,assets:vAssets,shares:vShares,pawning:vPawning,reports:vReports,settings:vSettings};
+const LOAN_KINDS=["Personal loan","Vehicle leasing","Housing loan","Education loan","Business loan","Family or friend","Other"];
+function vLoans(){const all=S.loans||[];const t0=today(),y=t0.slice(0,4);const rows=all.map(l=>({l,out:loanOutstanding(l),st:loanStatus(l)}));const act=rows.filter(r=>r.st.active),done=rows.filter(r=>!r.st.active);
+  const owed=sum(act,r=>r.out),monthly=sum(act,r=>+r.l.instalment||0),intY=sum(L().all.filter(t=>t.type==="loan_pay"&&t.date.slice(0,4)===y),t=>+t.interest||0);
+  const loanBills=S.bills.filter(b=>b.category==="Loan"&&b.active!==false);
+  const card=r=>{const l=r.l;const base=+(l.existing?l.owedAmount:l.principal)||0;const paidPct=l.existing?(+l.principal?Math.max(0,Math.min(100,(1-r.out/+l.principal)*100)):Math.max(0,Math.min(100,(1-r.out/base)*100))):Math.max(0,Math.min(100,(1-r.out/base)*100));const ml=loanMonthsLeft(l);const due=loanDue(l).due;const v=l.vehicle&&veh(l.vehicle);
+    return`<div class="panel"><div class="panel-head"><div><h2>${esc(l.name||"Loan")}</h2><p class="faint small">${esc([l.lender,l.kind,v?v.name:""].filter(Boolean).join(", "))}</p></div><span class="badge ${r.st.cls}">${r.st.label}</span></div>
+    <div style="display:flex;justify-content:space-between;align-items:end;gap:10px;flex-wrap:wrap"><div><span class="faint small">You owe</span><div style="font:800 1.9rem var(--display)" class="num neg">${rs0(r.out)}</div></div><div style="text-align:right"><span class="faint small">Monthly instalment</span><div class="num" style="font:700 1.1rem var(--display)">${rs0(l.instalment)}</div></div></div>
+    <div class="bar" style="margin:10px 0 4px"><i style="width:${paidPct}%"></i></div><p class="hint">${Math.round(paidPct)}% repaid${ml!=null?`, about ${ml} instalment${ml===1?"":"s"} left, finishing around ${monthName(mkey(addMonths(t0,ml)))}`:""}</p>
+    <div class="table-wrap" style="margin-top:10px"><table><tbody>
+      <tr><td>${l.existing?"Owed when added":"Borrowed"}</td><td class="r num">${rs0(base)} <span class="faint">${fdate(loanStart(l),{day:"numeric",month:"short",year:"numeric"})}</span></td></tr>
+      <tr><td>Interest rate</td><td class="r">${+l.rate||0}% a year</td></tr>
+      <tr><td>Next instalment</td><td class="r">${fdate(due)} <span class="faint">(day ${+l.payDay||1} each month)</span></td></tr>
+      <tr><td>Paid from</td><td class="r">${esc(acctLabel(acct(l.payFrom)))}</td></tr>
+      <tr><td>Interest paid so far</td><td class="r num">${rs0(sum(loanTxs(l).filter(t=>t.type==="loan_pay"),t=>+t.interest||0))}</td></tr>
+    </tbody></table></div>
+    <div class="actions" style="justify-content:flex-start;margin-top:10px"><button class="btn primary sm" data-act="loan-pay" data-id="${l.id}">Record payment</button><button class="btn sm" data-act="loan-pay" data-id="${l.id}" data-extra="1">Extra payment</button><button class="btn sm" data-act="loan-edit" data-id="${l.id}">Edit</button><button class="btn sm ghost" data-act="loan-history" data-id="${l.id}">History</button></div></div>`};
+  return`${head("Loans",act.length?`${rs0(owed)} owed on ${act.length} loan${act.length===1?"":"s"}`:"Money you've borrowed",`<button class="btn primary" data-act="loan-new">Add loan</button>`)}
+  ${loanBills.length&&act.length?`<div class="panel" style="border-color:var(--saffron);margin-bottom:16px"><p>You also have ${loanBills.length} loan bill${loanBills.length===1?"":"s"} (${esc(loanBills.map(b=>b.name).join(", "))}). If ${loanBills.length===1?"it's":"they're"} for a loan you've added here, pause ${loanBills.length===1?"it":"them"} in Bills so instalments aren't counted twice.</p></div>`:""}
+  <div class="stats"><div class="stat"><span>You owe</span><b class="${owed?"neg":""}">${rs0(owed)}</b><em>${act.length} active loan${act.length===1?"":"s"}</em></div><div class="stat"><span>Monthly instalments</span><b>${rs0(monthly)}</b><em>Included in your salary plan</em></div><div class="stat"><span>Interest paid ${y}</span><b>${rs0(intY)}</b><em>Counted as spending</em></div></div>
+  <div class="section">${act.length?`<div class="grid g2">${act.map(card).join("")}</div>`:`<div class="panel empty"><b>No loans yet</b>Add a personal loan, vehicle lease, housing loan or money borrowed from family. For a loan you already have, just enter what you owe today.<div style="margin-top:10px"><button class="btn primary" data-act="loan-new">Add loan</button></div></div>`}</div>
+  ${done.length?`<div class="section panel"><h2 style="margin-bottom:6px">Paid off</h2><div class="rows">${done.map(r=>`<div class="row click" data-act="loan-history" data-id="${r.l.id}" tabindex="0"><div class="glyph gl-card">Ln</div><div class="grow"><div class="t">${esc(loanLabel(r.l))}</div><div class="s">Interest paid ${rs0(sum(loanTxs(r.l).filter(t=>t.type==="loan_pay"),t=>+t.interest||0))}</div></div><span class="badge b-paid">Paid off</span></div>`).join("")}</div></div>`:""}
+  <p class="hint section">Interest on each payment is worked out on the reducing balance (what you still owe times the monthly rate). Your lender's statement has the exact split; you can change it on any payment.</p>`}
+function loanForm(l){l=l||{};const isEdit=!!l.id;const take=isEdit?L().all.find(t=>t.type==="loan_take"&&t.loanId===l.id):null;const existing=isEdit?!!l.existing:false;
+  const main=(S.accounts.find(a=>a.type==="Salary")||S.accounts.find(a=>a.type!=="Cash")||S.accounts[0]||{}).id;
+  openSheet(isEdit?"Edit loan":"Add loan",`<form class="f" data-form="loan" data-id="${l.id||""}">
+  <div class="fr">${fld("Loan name",`<input name="name" required value="${esc(l.name||"")}" placeholder="e.g. Car lease, Personal loan" autofocus>`)}${fld("Lender",`<input name="lender" value="${esc(l.lender||"")}" placeholder="e.g. LOLC, Commercial Bank">`)}</div>
+  <div class="fr">${fld("Type",`<select name="kind">${opt(LOAN_KINDS.map(x=>[x,x]),l.kind||"Personal loan")}</select>`)}${S.vehicles.length?fld("Vehicle (for leasing)",`<select name="vehicle"><option value="">None</option>${opt(S.vehicles.map(v=>[v.id,v.name]),l.vehicle||"")}</select>`):"<div></div>"}</div>
+  ${isEdit?"":`<div class="chips" data-lmode><button type="button" class="chip" data-m="new" aria-pressed="true">New loan, money comes in now</button><button type="button" class="chip" data-m="existing" aria-pressed="false">Loan I already have</button></div>`}<input type="hidden" name="existing" value="${existing?"1":""}">
+  <div data-newbox ${existing?"hidden":""}>
+    <div class="fr">${fld("Amount borrowed (Rs.)",`<input type="number" name="principal" step="0.01" min="0" inputmode="decimal" value="${l.principal||""}" data-lcalc>`)}${fld("Fees taken off (optional)",`<input type="number" name="fee" step="0.01" min="0" inputmode="decimal" value="${take&&take.fee||""}">`)}</div>
+    <div class="fr">${fld("Money went into",`<select name="acct">${opt(S.accounts.map(a=>[a.id,acctLabel(a)]),take?take.acct:main)}</select>`)}${fld("Date received",`<input type="date" name="date" value="${l.date||today()}">`)}</div>
+  </div>
+  <div data-oldbox ${existing?"":"hidden"}>
+    <div class="fr">${fld("Amount you owe today (Rs.)",`<input type="number" name="owedAmount" step="0.01" min="0" inputmode="decimal" value="${l.owedAmount||""}" data-lcalc>`)}${fld("As of",`<input type="date" name="owedDate" value="${l.owedDate||today()}">`)}</div>
+    ${fld("Original amount borrowed (optional)",`<input type="number" name="origPrincipal" step="0.01" min="0" inputmode="decimal" value="${existing?l.principal||"":""}">`)}
+  </div>
+  <div class="fr">${fld("Interest rate (% a year)",`<input type="number" name="rate" step="0.01" min="0" inputmode="decimal" value="${l.rate??""}" placeholder="e.g. 14" data-lcalc>`)}${fld("Months left to pay",`<input type="number" name="term" min="1" max="480" value="${l.term||""}" placeholder="e.g. 60" data-lcalc>`)}</div>
+  <div class="fr">${fld("Monthly instalment (Rs.)",`<input type="number" name="instalment" step="0.01" min="0" inputmode="decimal" value="${l.instalment||""}" required>`)}${fld("Paid on day of month",`<input type="number" name="payDay" min="1" max="31" value="${l.payDay||5}">`)}</div>
+  <p class="hint" data-lhint></p>
+  ${fld("Instalments paid from",`<select name="payFrom">${opt(S.accounts.map(a=>[a.id,acctLabel(a)]),l.payFrom||main)}</select>`)}
+  ${fld("Notes",`<textarea name="notes" rows="2">${esc(l.notes||"")}</textarea>`)}
+  <p class="info">A loan is money you owe, not income. Each payment is split into interest (counted as spending) and principal (which reduces what you owe).</p>
+  <div class="actions">${isEdit?`<button type="button" class="btn danger" data-act="loan-del" data-id="${l.id}">Delete</button>`:""}<button type="button" class="btn" data-act="close">Cancel</button><button class="btn primary">${isEdit?"Save changes":"Save loan"}</button></div></form>`,
+  root=>{const g=n=>root.querySelector(`[name=${n}]`);const inst=g("instalment");let touched=!!l.instalment;inst.addEventListener("input",()=>touched=true);
+    const upd=()=>{const ex=g("existing").value==="1";root.querySelector("[data-newbox]").hidden=ex;root.querySelector("[data-oldbox]").hidden=!ex;g("principal").required=!ex;g("owedAmount").required=ex;
+      const P=ex?+g("owedAmount").value:+g("principal").value,n=+g("term").value,r=+g("rate").value;const calc=loanInstalment(P,r,n);if(!touched&&calc)inst.value=Math.round(calc*100)/100;
+      root.querySelector("[data-lhint]").textContent=calc?`At ${r||0}% over ${n} months, the instalment works out to about ${rs0(calc)}. Change it if your lender's figure is different.`:""};
+    const mode=root.querySelector("[data-lmode]");if(mode)mode.addEventListener("click",e=>{const b=e.target.closest("[data-m]");if(!b)return;mode.querySelectorAll(".chip").forEach(x=>x.setAttribute("aria-pressed",x===b));g("existing").value=b.dataset.m==="existing"?"1":"";upd()});
+    root.querySelectorAll("[data-lcalc]").forEach(x=>x.addEventListener("input",upd));upd()})}
+function loanPayForm(l,t,extra){t=t||{};const isEdit=!!t.id;const out=loanOutstanding(l)+(isEdit?(+t.principalPaid||0):0);const monthInt=Math.round(out*(+l.rate||0)/1200*100)/100;
+  const amt=t.amount??(extra?"":Math.round(Math.min(+l.instalment||0,out+monthInt)*100)/100);
+  openSheet(isEdit?"Edit loan payment":extra?"Extra loan payment":"Record loan payment",`<form class="f" data-form="loanpay" data-id="${l.id}" data-tx="${t.id||""}">
+  <p class="info">${esc(loanLabel(l))}. You owe ${rs0(out)}; this month's interest is about ${rs0(monthInt)}.</p>
+  <div class="chips"><button type="button" class="chip" data-lq="inst">Instalment ${rs0(l.instalment)}</button><button type="button" class="chip" data-lq="all">Pay off ${rs0(out+monthInt)}</button><button type="button" class="chip" data-lq="extra">Extra (all to principal)</button></div>
+  ${fld("Amount paid (Rs.)",`<input type="number" name="amount" step="0.01" min="0" inputmode="decimal" required value="${amt}" ${extra?"autofocus":""}>`,"amt")}
+  <div class="fr">${fld("Interest part",`<input type="number" name="interest" step="0.01" min="0" inputmode="decimal" value="${t.interest??(extra?0:"")}">`)}${fld("Principal part",`<input type="number" name="principalPaid" step="0.01" min="0" inputmode="decimal" value="${t.principalPaid??""}">`)}</div>
+  <div class="fr">${fld("Paid from",`<select name="acct">${opt(S.accounts.map(a=>[a.id,acctLabel(a)]),t.acct||l.payFrom)}</select>`)}${fld("Date",`<input type="date" name="date" required value="${t.date||today()}">`)}</div>
+  ${fld("Reference (optional)",`<input name="ref" value="${esc(t.ref||"")}">`)}
+  <p class="hint" data-lpt></p>
+  <div class="actions">${isEdit?`<button type="button" class="btn danger" data-act="del-tx" data-id="${t.id}">Delete</button>`:""}<button type="button" class="btn" data-act="close">Cancel</button><button class="btn primary">Save payment</button></div></form>`,
+  root=>{const g=n=>root.querySelector(`[name=${n}]`);let manual=isEdit,extraMode=!!extra;
+    const split=()=>{if(manual)return;const a=+g("amount").value||0;const i=extraMode?0:Math.min(a,monthInt);g("interest").value=Math.round(i*100)/100;g("principalPaid").value=Math.round(Math.min(out,a-i)*100)/100;note()};
+    const note=()=>{const i=+g("interest").value||0,pp=+g("principalPaid").value||0;root.querySelector("[data-lpt]").textContent=`Interest ${rs(i)} counts as spending. ${pp>=out-0.005&&out>0?"This pays off the loan.":`You'll owe ${rs(Math.max(0,out-pp))} after this.`}`};
+    g("amount").addEventListener("input",()=>{manual=false;split()});["interest","principalPaid"].forEach(n=>g(n).addEventListener("input",()=>{manual=true;note()}));
+    root.querySelector(".chips").addEventListener("click",e=>{const b=e.target.closest("[data-lq]");if(!b)return;manual=false;extraMode=b.dataset.lq==="extra";if(b.dataset.lq==="inst")g("amount").value=Math.round(Math.min(+l.instalment||0,out+monthInt)*100)/100;if(b.dataset.lq==="all")g("amount").value=Math.round((out+monthInt)*100)/100;if(extraMode)g("amount").focus();split()});
+    if(!isEdit)split();else note()})}
+function loanHistory(l){const txs=loanTxs(l).slice().reverse();openSheet(loanLabel(l),`<div class="table-wrap"><table><tbody><tr><td class="muted">Still owed</td><td class="r num">${rs0(loanOutstanding(l))}</td></tr><tr><td class="muted">Interest paid</td><td class="r num">${rs0(sum(txs.filter(t=>t.type==="loan_pay"),t=>+t.interest||0))}</td></tr><tr><td class="muted">Principal repaid</td><td class="r num">${rs0(sum(txs.filter(t=>t.type==="loan_pay"),t=>+t.principalPaid||0))}</td></tr>${l.notes?`<tr><td class="muted">Notes</td><td class="r" style="white-space:normal">${esc(l.notes)}</td></tr>`:""}</tbody></table></div>
+  <h3 style="margin:16px 0 4px">Payments</h3>${txList(txs)}<div class="actions"><button class="btn" data-act="loan-edit" data-id="${l.id}">Edit loan</button></div>`)}
+function saveLoan(f){const fd=new FormData(f);const g=k=>(fd.get(k)??"").toString().trim();const id=f.dataset.id;const ex=g("existing")==="1";
+  const l=id?loan(id):{id:uid()};const inst=Math.round((+g("instalment")||0)*100)/100;if(!(inst>0)){toast("Enter the monthly instalment.");return}
+  if(ex){const owed=+g("owedAmount");if(!(owed>0)){toast("Enter how much you owe today.");return}Object.assign(l,{existing:true,owedAmount:Math.round(owed*100)/100,owedDate:g("owedDate")||today(),principal:+g("origPrincipal")||0})}
+  else{const pr=+g("principal");if(!(pr>0)){toast("Enter the amount borrowed.");return}Object.assign(l,{existing:false,principal:Math.round(pr*100)/100,date:g("date")||today()})}
+  Object.assign(l,{name:g("name"),lender:g("lender"),kind:g("kind"),vehicle:g("vehicle")||"",rate:+g("rate")||0,term:+g("term")||0,instalment:inst,payDay:Math.min(31,Math.max(1,+g("payDay")||1)),payFrom:g("payFrom"),notes:g("notes")});
+  if(!id){S.loans=S.loans||[];S.loans.push(l)}
+  const old=L().all.find(t=>t.type==="loan_take"&&t.loanId===l.id);
+  if(!l.existing){const fee=Math.round((+g("fee")||0)*100)/100;if(fee>=l.principal){toast("Fees can't be more than the loan.");return}const t={id:old?old.id:uid(),ts:old?old.ts:Date.now(),type:"loan_take",loanId:l.id,date:l.date,amount:Math.round((l.principal-fee)*100)/100,acct:g("acct")||l.payFrom,method:"Bank Account"};if(fee){t.fee=fee;t.cat="Bank charges";t.sub="Loan fee"}stampCurrency(t);upsertTx(t,old)}
+  else if(old)deleteTx(old);
+  saveState();invalidate();closeSheet();render();toast(id?"Loan updated":l.existing?"Loan added":"Loan saved. The money is now in "+acctLabel(acct(g("acct"))))}
+function saveLoanPay(f){const fd=new FormData(f);const g=k=>(fd.get(k)??"").toString().trim();const l=loan(f.dataset.id);if(!l)return;const old=f.dataset.tx?findTx(f.dataset.tx):null;
+  const amount=Math.round((+g("amount")||0)*100)/100,interest=Math.round((+g("interest")||0)*100)/100,pp=Math.round((+g("principalPaid")||0)*100)/100;
+  if(!(amount>0)){toast("Enter the amount paid.");return}if(Math.abs(interest+pp-amount)>0.011){toast(`Interest and principal should add up to ${rs(amount)}.`);return}
+  const owed=loanOutstanding(l)+(old?(+old.principalPaid||0):0);if(pp>owed+0.005){toast(`You only owe ${rs(owed)} on this loan.`);return}
+  const t={id:old?old.id:uid(),ts:old?old.ts:Date.now(),type:"loan_pay",loanId:l.id,date:g("date")||today(),amount,interest,principalPaid:pp,acct:g("acct"),method:"Bank Transfer",cat:"Bank charges",sub:"Loan interest"};if(g("ref"))t.ref=g("ref");if(pp>=owed-0.005)t.paidOff=true;
+  stampCurrency(t);upsertTx(t,old);saveState();closeSheet();render();toast(t.paidOff?"Loan paid off. Well done.":"Payment saved")}
+const VIEW_FN={dashboard:vDashboard,salary:vSalary,transactions:vTransactions,accounts:vAccounts,cards:vCards,bills:vBills,food:vFood,vehicles:vVehicles,fuel:vFuel,budget:vBudget,savings:vSavings,assets:vAssets,shares:vShares,pawning:vPawning,loans:vLoans,reports:vReports,settings:vSettings};
 const POST={};
 
 /* ================= Modal ================= */
@@ -812,7 +926,7 @@ function openSheet(title,body,mount){const m=$("#modal");m.innerHTML=`<div class
 function closeSheet(){$("#modal").innerHTML=""}
 
 function chooser(){openSheet("Add transaction",`<div class="types">
-  ${[["expense","Expense","Cash, bank or debit"],["income","Income","Salary or other"],["transfer","Transfer","Between your accounts"],["cc_purchase","Credit card purchase","Spent on a card"],["cc_payment","Credit card payment","Pay a card from bank"],["bill","Bill payment","Electricity, rent, loans"],["fuel","Fuel","Linked to a vehicle"],["refund","Refund","Money back"],["asset_buy","Asset purchase","Land, gold, laptop"],["share_buy","Buy shares","CSE share purchase"],["pawn_new","Pawning","Gold loan money in"]].map(([k,l,s])=>`<button data-act="add" data-type="${k}"><div class="glyph ${k==="income"?"gl-inc":k==="transfer"||k==="cc_payment"?"gl-xfer":k==="cc_purchase"?"gl-card":k==="refund"?"gl-ref":k==="asset_buy"||k==="share_buy"?"gl-asset":k==="pawn_new"?"gl-card":"gl-exp"}">${{expense:"Ex",income:"In",transfer:"⇄",cc_purchase:"CC",cc_payment:"⇄",bill:"B",fuel:"F",refund:"Rf",asset_buy:"As",share_buy:"Sh",pawn_new:"Pw"}[k]}</div><div>${l}<small>${s}</small></div></button>`).join("")}</div>
+  ${[["expense","Expense","Cash, bank or debit"],["income","Income","Salary or other"],["transfer","Transfer","Between your accounts"],["cc_purchase","Credit card purchase","Spent on a card"],["cc_payment","Credit card payment","Pay a card from bank"],["bill","Bill payment","Electricity, rent, loans"],["fuel","Fuel","Linked to a vehicle"],["refund","Refund","Money back"],["asset_buy","Asset purchase","Land, gold, laptop"],["share_buy","Buy shares","CSE share purchase"],["pawn_new","Pawning","Gold loan money in"],["loan_new","Loan","Borrowed money"]].map(([k,l,s])=>`<button data-act="add" data-type="${k}"><div class="glyph ${k==="income"?"gl-inc":k==="transfer"||k==="cc_payment"?"gl-xfer":k==="cc_purchase"?"gl-card":k==="refund"?"gl-ref":k==="asset_buy"||k==="share_buy"?"gl-asset":k==="pawn_new"||k==="loan_new"?"gl-card":"gl-exp"}">${{expense:"Ex",income:"In",transfer:"⇄",cc_purchase:"CC",cc_payment:"⇄",bill:"B",fuel:"F",refund:"Rf",asset_buy:"As",share_buy:"Sh",pawn_new:"Pw",loan_new:"Ln"}[k]}</div><div>${l}<small>${s}</small></div></button>`).join("")}</div>
   <div class="more-types chips"><button class="chip" data-act="add" data-type="transfer" data-tosav="1">Savings transfer</button><button class="chip" data-act="add" data-type="transfer" data-preset="withdraw">Cash withdrawal</button><button class="chip" data-act="add" data-type="transfer" data-preset="deposit">Cash deposit</button><button class="chip" data-act="paste">Paste bank SMS</button><button class="chip" data-act="add" data-type="asset_sell">Asset sale</button><button class="chip" data-act="add" data-type="share_sell">Sell shares</button><button class="chip" data-act="add" data-type="dividend">Dividend</button></div>`)}
 function moreMenu(){openSheet("More",`<div class="types">${VIEWS.filter(([k])=>!["dashboard","transactions","budget"].includes(k)).map(([k,l])=>`<button data-act="nav" data-v="${k}"><div>${l}</div></button>`).join("")}</div>
   ${Store.user?`<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;border-top:1px solid var(--line);margin-top:16px;padding-top:14px"><div class="small faint" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Signed in as <span style="color:var(--ink-2)">${esc(Store.user)}</span></div><button class="btn danger" data-act="logout">Sign out</button></div>`:""}`)}
@@ -823,6 +937,8 @@ const fld=(label,inner,cls)=>`<label class="fld ${cls||""}"><span>${label}</span
 const acctsFor=method=>S.accounts.filter(a=>method==="Cash"?a.type==="Cash":method==="Digital Wallet"?a.type==="Digital Wallet":a.type!=="Cash"&&a.type!=="Digital Wallet");
 /* Smart categories: built-in Sri Lankan merchants, then whatever you've done before. */
 const MERCHANT_RULES=[
+  [/tesco|sainsbury|\basda\b|\blidl\b|\baldi\b|waitrose|morrisons|\bco-?op\b|m&s\s*food/i,null,"Groceries","Supermarket"],[/\bpret\b|costa\s*coffee|caffe\s*nero|greggs/i,null,"Food","Coffee"],
+  [/deliveroo|just\s*eat/i,null,"Food","Delivery"],[/\btfl\b|transport\s*for\s*london|trainline|national\s*rail/i,null,"Transport","Train"],
   [/netflix/i,"Netflix","Subscriptions","Netflix"],[/hbo\s*max|\bhbo\b|\bmax\.com|warner\s*bros/i,"HBO Max","Subscriptions","HBO Max"],
   [/prime\s*video|amazon\s*prime|amzn\s*(?:prime|digital|mktp\s*digital)|primevideo/i,"Amazon Prime","Subscriptions","Amazon Prime"],
   [/apple\.com\/bill|itunes|icloud|apple\s*(?:music|tv|one|services)|app\s*store/i,"Apple","Subscriptions","Apple"],
@@ -868,6 +984,7 @@ function parseReceipt(raw){const text=String(raw||"").replace(/\u00a0/g," ");con
     if(/bal|balance|avl|available|limit|outstanding|due|minimum|min\.?\s*pay|subtotal|discount|tip/.test(ctx))sc-=10;
     if(!best||sc>best.sc)best={v,sc}}
   if(best&&best.sc>-5)r.amount=Math.round(best.v*100)/100;
+  else{const fm=text.match(/(£|€|\$|\b(?:gbp|usd|eur|aud|aed|inr)\b)\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i);if(fm){r.amount=+fm[2].replace(/,/g,"");r.cur={"£":"GBP","€":"EUR","$":"USD"}[fm[1]]||fm[1].toUpperCase()}}
   r.date=parseDateIn(text)||today();
   // merchant
   const rule=ruleCat(text);let merchant=rule&&rule.name;
@@ -897,7 +1014,7 @@ function smsSplit(text){const chunks=String(text||"").replace(/\r/g,"").split(/\
   return out}
 function defaultTarget(dir,text){const savings=S.accounts.find(a=>a.type==="Savings")||S.accounts.find(a=>a.type==="Salary")||bankAccts()[0];
   if(/credit\s*card/i.test(text)&&S.cards.length&&!(dir==="credit"&&/a\/c|account/i.test(text)))return"c:"+S.cards[0].id;return savings?"a:"+savings.id:(S.cards[0]?"c:"+S.cards[0].id:"")}
-function smsTarget(r,dir,text){if(r.card)return"c:"+r.card;if(r.acct&&acct(r.acct)&&acct(r.acct).type!=="Cash")return"a:"+r.acct;
+function smsTarget(r,dir,text){if(r.card)return"c:"+r.card;if(r.cur){const fa=S.accounts.find(a=>a.currency===r.cur&&(!/monzo/i.test(text)||/monzo/i.test((a.bank||"")+a.name)))||S.accounts.find(a=>a.currency===r.cur);if(fa)return"a:"+fa.id}if(r.acct&&acct(r.acct)&&acct(r.acct).type!=="Cash")return"a:"+r.acct;
   const wantsCard=/credit\s*card|\bvisa\b|master\s*card|\bamex\b|card\s+(?:no|ending|number)/i.test(text)&&!/debit\s*card/i.test(text);
   for(const re of BANK_ALIASES){if(!re.test(text))continue;const cs=S.cards.filter(c=>re.test(c.bank||"")||re.test(c.name||"")),as=bankAccts().filter(a=>re.test(a.bank||"")||re.test(a.name||""));
     if(wantsCard&&cs.length)return"c:"+cs[0].id;if(as.length)return"a:"+(as.find(a=>a.type==="Savings")||as[0]).id;if(cs.length)return"c:"+cs[0].id}
@@ -910,6 +1027,8 @@ function analyseSms(text){const r=parseReceipt(text);let dir=r.type==="income"||
   if(what==="transfer"){const opts=smsOtherOptions(dir,target);other=opts.length?opts[0][0]:""}
   if((what==="Fuel"||what==="Vehicle")&&S.vehicles.length)other=S.vehicles[0].id;
   let merchant=r.merchant||"";
+  const act=(S.loans||[]).filter(l=>loanOutstanding(l)>0);
+  if(dir==="debit"&&act.length&&target.startsWith("a:")&&/loan|leasing|instal+ment|\bemi\b/i.test(text)){what="loan";const hit=act.find(l=>[l.lender,l.name].filter(Boolean).some(n=>n.split(/\s+/).some(w=>w.length>2&&new RegExp("\\b"+w.replace(/[^a-z0-9]/gi,"")+"\\b","i").test(text))));other=(hit||act[0]).id;merchant=""}
   if(CC_PAY.test(text)&&S.cards.length){const digs=[...text.matchAll(/(\d{4})\b/g)].map(x=>x[1]);
     const byBank=()=>{for(const re of BANK_ALIASES)if(re.test(text)){const cs=S.cards.filter(c=>re.test(c.bank||"")||re.test(c.name||""));if(cs.length===1)return cs[0]}return null};
     const cardHit=S.cards.find(c=>c.last4&&digs.includes(c.last4))||byBank()||(S.cards.length===1?S.cards[0]:null);
@@ -922,7 +1041,7 @@ function smsTargetOptions(){return`<optgroup label="Bank accounts">${bankAccts()
 function smsWhatOptions(dir,target){const isCard=String(target).startsWith("c:");
   if(dir==="credit")return isCard?[["transfer","Card payment from my account"],["refund","Refund or cashback"]]:[["income","Income"],["refund","Refund"],["transfer","Transfer from my own account"]];
   const cats=Object.keys(CATS).map(c=>[c,c]);if(S.vehicles.length)cats.splice(2,0,["Fuel","Fuel"]);
-  return isCard?cats:[...cats,["transfer","Transfer to my own account or card"]]}
+  return isCard?cats:[...cats,["transfer","Transfer to my own account or card"],...((S.loans||[]).some(l=>loanOutstanding(l)>0)?[["loan","Loan payment"]]:[])]}
 function smsOtherOptions(dir,target){if(dir==="debit")return[...bankAccts().filter(a=>"a:"+a.id!==target).map(a=>["a:"+a.id,"To "+acctLabel(a)]),...S.cards.map(c=>["c:"+c.id,"Pay "+c.name])];
   return bankAccts().filter(a=>"a:"+a.id!==target).map(a=>["a:"+a.id,"From "+acctLabel(a)])}
 function smsBuildTx(m){const amt=Math.round((+m.amount||0)*100)/100;const tg=m.target,isCard=tg.startsWith("c:"),id=tg.slice(2);const base={id:uid(),ts:Date.now()+Math.random(),date:m.date||today(),amount:amt,notes:m.text.length>300?m.text.slice(0,300)+"…":m.text,fromSms:true};
@@ -930,6 +1049,7 @@ function smsBuildTx(m){const amt=Math.round((+m.amount||0)*100)/100;const tg=m.t
   if(m.dir==="debit"){
     if(m.what==="transfer"){if(isCard)return{err:"A transfer can't come out of a credit card. Choose a bank account."};const o=m.other;if(!o)return{err:"Choose where the money went."};
       if(o.startsWith("c:"))return{tx:{...base,type:"cc_payment",acct:id,card:o.slice(2),method:"Bank Transfer"}};return{tx:{...base,type:"transfer",acct:id,toAcct:o.slice(2),kind:transferKind(id,o.slice(2)),method:"Bank Transfer"}}}
+    if(m.what==="loan"){const l=loan(m.other);if(!l)return{err:"Choose the loan."};if(isCard)return{err:"Loan payments come from a bank account."};const sp=loanSplit(l,amt);return{tx:{...base,type:"loan_pay",loanId:l.id,acct:id,method:"Bank Transfer",interest:sp.interest,principalPaid:sp.principal,cat:"Bank charges",sub:"Loan interest",...(sp.principal>=loanOutstanding(l)-0.005?{paidOff:true}:{})}}}
     const pay=isCard?{card:id,method:"Credit Card"}:{acct:id,method:m.method||"Bank Account"};
     if(m.what==="Fuel"){if(!m.other)return{err:"Choose the vehicle."};return{tx:{...base,...pay,type:"fuel",cat:"Fuel",vehicle:m.other}}}
     const sg=m.merchant&&suggestCat(m.merchant);const sub=m.sub&&m.subFor===m.what?m.sub:(sg&&sg.cat===m.what&&sg.sub?sg.sub:(CATS[m.what]||["Other"]).slice(-1)[0]);
@@ -943,19 +1063,20 @@ function smsSides(t){return eff(t).d.map(([k,id,v])=>k+":"+id+(v>0?"+":"-"))}
 function smsDuplicate(t,extra){const mine=smsSides(t);const hit=x=>Math.abs(daysBetween(x.date,t.date))<=1&&Math.abs(+x.amount-t.amount)<0.01&&smsSides(x).some(sd=>mine.includes(sd));
   const inBatch=(extra||[]).find(hit);if(inBatch)return{batch:true,tx:inBatch};const old=L().all.find(hit);return old?{batch:false,tx:old}:null}
 let SMS_ROWS=[];
+const smsCur=m=>String(m.target).startsWith("a:")?acctCur(m.target.slice(2)):"LKR";
 function smsRowHtml(m,i){const what=smsWhatOptions(m.dir,m.target);if(!what.some(w=>w[0]===m.what))m.what=what[0][0];
-  const needOther=m.what==="transfer"||m.what==="Fuel"||m.what==="Vehicle";const otherOpts=m.what==="transfer"?smsOtherOptions(m.dir,m.target):S.vehicles.map(v=>[v.id,v.name]);
+  const needOther=m.what==="transfer"||m.what==="Fuel"||m.what==="Vehicle"||m.what==="loan";const otherOpts=m.what==="transfer"?smsOtherOptions(m.dir,m.target):m.what==="loan"?(S.loans||[]).filter(l=>loanOutstanding(l)>0).map(l=>[l.id,loanLabel(l)]):S.vehicles.map(v=>[v.id,v.name]);
   if(needOther&&!otherOpts.some(o=>o[0]===m.other))m.other=otherOpts[0]?otherOpts[0][0]:"";
   const built=smsBuildTx(m);const earlier=SMS_ROWS.slice(0,i).filter(r=>r.use).map(r=>r._tx).filter(Boolean);const dup=built.tx&&+m.amount>0?smsDuplicate(built.tx,earlier):null;
   if(m.use===undefined)m.use=!!(+m.amount>0)&&!dup;m._tx=m.use&&built.tx?built.tx:null;
   const sel=(f,opts,val,label)=>`<label class="fld"><span>${label}</span><select data-sms="${f}" data-i="${i}">${typeof opts==="string"?opts:opt(opts,val)}</select></label>`;
   return`<div style="border:1px solid ${m.dir==="credit"?"var(--tea)":"var(--line)"};border-radius:14px;padding:12px;display:grid;gap:10px;${m.use?"":"opacity:.62"}">
-    <label class="chk" style="justify-content:space-between;gap:10px"><span style="display:flex;gap:8px;align-items:center"><input type="checkbox" data-sms="use" data-i="${i}" ${m.use?"checked":""}> <b class="num ${m.dir==="credit"?"pos":""}">${m.dir==="credit"?"+":"−"}${+m.amount>0?rs(+m.amount):"Rs. ?"}</b></span><span class="badge ${m.dir==="credit"?"b-paid":"b-up"}">${m.dir==="credit"?"Credit":"Debit"}</span></label>
+    <label class="chk" style="justify-content:space-between;gap:10px"><span style="display:flex;gap:8px;align-items:center"><input type="checkbox" data-sms="use" data-i="${i}" ${m.use?"checked":""}> <b class="num ${m.dir==="credit"?"pos":""}">${m.dir==="credit"?"+":"−"}${+m.amount>0?fmtCur(+m.amount,smsCur(m)):"?"}</b></span><span class="badge ${m.dir==="credit"?"b-paid":"b-up"}">${m.dir==="credit"?"Credit":"Debit"}</span></label>
     <p class="hint" style="overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${esc(m.text)}</p>
     ${dup?`<p class="info" style="padding:8px 10px">${dup.batch?`This is the other side of a message above (${esc(txTitle(dup.tx))}). Money moving between your own accounts is one transaction, so ${m.use?"untick this one":"it's unticked"}.`:`This looks like it's already in Kasi (${esc(txTitle(dup.tx))}, ${fdate(dup.tx.date,{day:"numeric",month:"short"})}). ${m.use?"Untick it unless it's a separate payment.":"It's unticked so it isn't added twice."}`}</p>`:""}
     <div class="fr">${sel("dir",[["debit","Debit (money out)"],["credit","Credit (money in)"]],m.dir,"Debit or credit")}${sel("target",smsTargetOptions().replace(`value="${m.target}"`,`value="${m.target}" selected`),m.target,m.dir==="credit"?"Into":"From")}</div>
-    <div class="fr">${sel("what",what,m.what,m.dir==="credit"?"What was it?":"Spent on")}${needOther?sel("other",otherOpts,m.other,m.what==="transfer"?(m.dir==="credit"?"Came from":"Went to"):"Vehicle"):"<div></div>"}</div>
-    <div class="fr"><label class="fld"><span>Amount (Rs.)</span><input type="number" step="0.01" min="0" inputmode="decimal" data-sms="amount" data-i="${i}" value="${m.amount}"></label><label class="fld"><span>Date</span><input type="date" data-sms="date" data-i="${i}" value="${m.date}"></label></div>
+    <div class="fr">${sel("what",what,m.what,m.dir==="credit"?"What was it?":"Spent on")}${needOther?sel("other",otherOpts,m.other,m.what==="transfer"?(m.dir==="credit"?"Came from":"Went to"):m.what==="loan"?"Which loan":"Vehicle"):"<div></div>"}</div>
+    <div class="fr"><label class="fld"><span>Amount (${smsCur(m)==="LKR"?"Rs.":smsCur(m)})</span><input type="number" step="0.01" min="0" inputmode="decimal" data-sms="amount" data-i="${i}" value="${m.amount}"></label><label class="fld"><span>Date</span><input type="date" data-sms="date" data-i="${i}" value="${m.date}"></label></div>
     <label class="fld"><span>Shop or description</span><input data-sms="merchant" data-i="${i}" value="${esc(m.merchant)}" autocomplete="off"></label>
   </div>`}
 function smsReviewRender(){const box=$("#smsRows");if(!box)return;box.innerHTML=SMS_ROWS.map(smsRowHtml).join("");const n=SMS_ROWS.filter(m=>m.use).length;const b=$("#smsSave");if(b){b.textContent=n?`Add ${n} transaction${n===1?"":"s"}`:"Nothing ticked";b.disabled=!n}}
@@ -972,7 +1093,7 @@ function smsReview(msgs){SMS_ROWS=msgs.map(analyseSms);
 function smsSave(){let added=0,skipped=0;const errs=[];
   SMS_ROWS.forEach((m,i)=>{if(!m.use)return;if(!(+m.amount>0)){errs.push(`Message ${i+1}: enter the amount.`);return}if(!m.target){errs.push(`Message ${i+1}: choose an account or card.`);return}
     const b=smsBuildTx(m);if(b.err){errs.push(`Message ${i+1}: ${b.err}`);return}
-    if(smsDuplicate(b.tx)&&!m.touched){skipped++;return}Object.keys(b.tx).forEach(k=>b.tx[k]===undefined&&delete b.tx[k]);upsertTx(b.tx);added++});
+    stampCurrency(b.tx);if(smsDuplicate(b.tx)&&!m.touched){skipped++;return}Object.keys(b.tx).forEach(k=>b.tx[k]===undefined&&delete b.tx[k]);upsertTx(b.tx);added++});
   if(errs.length&&!added){toast(errs[0]);return}
   saveState();closeSheet();render();toast(`Added ${added} transaction${added===1?"":"s"}${skipped?`. Skipped ${skipped} already in Kasi`:""}${errs.length?`. ${errs.length} need${errs.length===1?"s":""} fixing and weren't added`:""}.`)}
 function openFromText(text){text=String(text||"").trim();if(!text){toast("There was nothing to read.");return}
@@ -1021,7 +1142,8 @@ function txForm(type,t,preset){preset=preset||{};t=t||{};const isEdit=!!t.id;con
     if(!isEdit){if(preset.tosav){from=bank&&bank.id;to=sav&&sav.id}else if(preset.preset==="withdraw"){from=bank&&bank.id;to=cash&&cash.id}else if(preset.preset==="deposit"){from=cash&&cash.id;to=bank&&bank.id}else{from=bank&&bank.id}}
     const targets=[...S.accounts.map(a=>[a.id,acctLabel(a)+", "+a.type]),...S.cards.map(c=>["card:"+c.id,c.name+", credit card"])];
     body=`${amountF()}<div class="fr">${fld("From",`<select name="acct" required>${opt(S.accounts.map(a=>[a.id,acctLabel(a)+", "+a.type]),from)}</select>`)}${fld("To",`<select name="toAcct" required>${opt(targets,to||"")}</select>`)}</div>
-    <div class="fr">${dateF}${fld("Transfer fee (Rs.)",`<input type="number" step="any" min="0" name="fee" value="${t.fee||""}" placeholder="0">`)}</div>${refF}${notesF}
+    <div data-toamt hidden>${fld("Amount received",`<input type="number" step="0.01" min="0" inputmode="decimal" name="toAmount" value="${t.toAmount??(t.type==="cc_payment"&&t.lkr!=null?t.lkr:"")}">`)}</div>
+    <div class="fr">${dateF}${fld("Transfer fee",`<input type="number" step="any" min="0" name="fee" value="${t.fee||""}" placeholder="0">`)}</div>${refF}${notesF}
     <p class="info">Moving money between your own accounts is not income or spending. Choosing a credit card here records a card payment. Only the fee counts as a bank charge.</p>`;
     title=isEdit?"Edit transfer":preset.tosav?"Move to savings":preset.preset==="withdraw"?"Cash withdrawal":preset.preset==="deposit"?"Cash deposit":"Transfer";
   }else if(type==="cc_payment"){
@@ -1097,6 +1219,14 @@ function txForm(type,t,preset){preset=preset||{};t=t||{};const isEdit=!!t.id;con
 }
 function mountTxForm(root,type,t){
   mountPay(root,t);
+  {const amtIn=root.querySelector("input[name=amount]"),acS=root.querySelector("select[name=acct]");
+   if(amtIn&&acS&&amtIn.type!=="hidden"){const lab=amtIn.closest("label").querySelector("span"),base=lab.textContent.replace(/\s*\((?:Rs\.|[A-Z]{3})\)\s*$/,"");const hint=document.createElement("p");hint.className="hint";hint.style.marginTop="-6px";amtIn.closest("label").after(hint);
+     const ms=root.querySelector("[data-paymethod]"),toS=root.querySelector("select[name=toAcct]"),box=root.querySelector("[data-toamt]"),ti=root.querySelector("[name=toAmount]");let touched=!!(t.toAmount!=null);if(ti)ti.addEventListener("input",()=>touched=true);
+     const upd=()=>{const usingCard=ms&&ms.value==="Credit Card";const c=usingCard?"LKR":acctCur(acS.value);lab.textContent=`${base} (${c==="LKR"?"Rs.":c})`;const r=rateFor(c);
+       hint.textContent=c!=="LKR"?(r?(+amtIn.value?`About ${rs0(+amtIn.value*r)} at 1 ${c} = Rs. ${r}`:`Rate used: 1 ${c} = Rs. ${r}`):`Set the ${c} exchange rate in Settings so this counts in your totals.`):"";hint.hidden=!hint.textContent;
+       if(toS&&box&&ti){const c2=toS.value.startsWith("card:")?"LKR":acctCur(toS.value);const diff=c!==c2;box.hidden=!diff;ti.required=diff;ti.closest("label").querySelector("span").textContent=`Amount received (${c2==="LKR"?"Rs.":c2})`;
+         if(diff&&!touched&&+amtIn.value&&rateFor(c2))ti.value=Math.round(+amtIn.value*rateFor(c)/rateFor(c2)*100)/100}};
+     acS.addEventListener("change",upd);amtIn.addEventListener("input",upd);if(ms)ms.addEventListener("change",()=>setTimeout(upd,0));if(toS)toS.addEventListener("change",upd);upd()}}
   const cc=root.querySelector("[data-catchips]");
   if(cc){const hid=root.querySelector("input[name=cat]"),sub=root.querySelector("[data-sub]"),vw=root.querySelector("[data-vehwrap]");
     const upd=()=>{const c=hid.value;const vs=vw&&vw.querySelector("select");if(vw){vw.hidden=!(c==="Vehicle"||S.vehicles.length&&vs&&vs.value);if(c==="Vehicle"&&vs){vw.hidden=false;vs.required=true;if(!vs.value&&S.vehicles[0])vs.value=S.vehicles[0].id}else if(vs)vs.required=false}};
@@ -1156,7 +1286,7 @@ async function submitTx(form){const type=form.dataset.type;const id=form.dataset
   if(type==="expense"||type==="cc_purchase"){t.cat=g("cat");t.sub=g("sub");t.merchant=g("merchant")||undefined;t.desc=g("desc")||undefined;t.recurring=!!fd.get("recurring")||undefined;
     if(type==="cc_purchase"){t.method="Credit Card";t.card=g("card")}else if(!payFrom())return;t.type=t.card?"cc_purchase":"expense";t.vehicle=g("vehicle")||undefined;if(t.cat==="Vehicle"&&!t.vehicle){toast("Choose the vehicle for this expense.");return}}
   else if(type==="income"){t.type="income";t.sub=g("sub");t.acct=g("acct");t.desc=g("desc")||undefined;t.method="Bank Account";if(t.sub==="Salary"){const n=k=>+g(k)||0;const s={basic:n("basic"),allow:n("allow"),bonus:n("bonus"),other:n("other"),deduct:n("deduct")};if(Object.values(s).some(Boolean))t.sal=s}if(!t.acct){toast("Add a bank account first.");return}}
-  else if(type==="transfer"){t.acct=g("acct");const to=g("toAcct");t.fee=+g("fee")||undefined;if(to.startsWith("card:")){t.type="cc_payment";t.card=to.slice(5)}else{t.type="transfer";t.toAcct=to;if(to===t.acct){toast("From and To must be different accounts.");return}t.kind=transferKind(t.acct,to)}t.method="Bank Transfer"}
+  else if(type==="transfer"){t.acct=g("acct");const to=g("toAcct");t.fee=+g("fee")||undefined;if(to.startsWith("card:")){t.type="cc_payment";t.card=to.slice(5);if(acctCur(t.acct)!=="LKR"){t.lkr=+g("toAmount")||undefined;t._restamp=!t.lkr}}else{t.type="transfer";t.toAcct=to;if(to===t.acct){toast("From and To must be different accounts.");return}t.kind=transferKind(t.acct,to);if(acctCur(t.acct)!==acctCur(to)){t.toAmount=+g("toAmount")||undefined;if(!t.toAmount){toast("Enter the amount received.");return}}}t.method="Bank Transfer"}
   else if(type==="cc_payment"){t.type="cc_payment";t.card=g("card");t.acct=g("acct");t.method="Bank Transfer";const st=cardStatus(card(t.card));t.full=t.amount>=st.amountDue-0.01}
   else if(type==="bill"){t.type="bill";const [bid,due]=g("billKey").split("|");t.already=!!fd.get("already")||undefined;if(bid){t.billId=bid;t.billDue=due;const b=bill(bid);t.sub=b?b.category:"Other";t.desc=b?b.name:undefined;t.merchant=b&&b.provider||undefined}else{t.desc=g("desc")||"Bill";t.sub=g("sub")||"Other"}
     t.cat="Bills";if(!payFrom())return;t.vehicle=g("vehicle")||(bid&&bill(bid)&&bill(bid).vehicle)||undefined}
@@ -1178,13 +1308,14 @@ async function submitTx(form){const type=form.dataset.type;const id=form.dataset
     if(old&&old.assetId&&old.assetId!==t.assetId){const oa=asset(old.assetId);if(oa&&oa.sold&&oa.sold.txId===old.id)delete oa.sold}
     a.sold={date:t.date,amount:t.amount,txId:t.id}}
   else if(type==="refund"){t.type="refund";t.cat=g("cat");t.sub=g("sub");t.merchant=g("merchant")||undefined;const d=g("dest");if(d.startsWith("c:"))t.card=d.slice(2);else t.acct=d.slice(2);t.method=t.card?"Credit Card":"Bank Account"}
+  if(old&&old.amount!==t.amount)t._restamp=true;stampCurrency(t);
   Object.keys(t).forEach(k=>t[k]===undefined&&delete t[k]);
   const file=fd.get("receipt");if(file&&file.size){const img=await compressImage(file).catch(()=>null);if(img){t.receipt=true;Store.put("rc-"+t.id,{img})}else toast("That photo couldn't be attached. Try a smaller image.")}else if(old&&old.receipt)t.receipt=true;
   upsertTx(t,old);saveState();closeSheet();render();toast(old?"Changes saved":TYPE_LABEL[t.type]+" saved");}
 
 function txDetail(t){const e=eff(t);const rows=[["Type",TYPE_LABEL[t.type]+(t.kind?", "+t.kind:"")],t.assetId?["Asset",(asset(t.assetId)||{}).name||"(removed asset)"]:null,t.stockId?["Company",stockLabel(stock(t.stockId))]:null,t.stockId&&t.qty?["Shares",fq(t.qty)]:null,t.stockId&&t.price?["Price per share",rs(t.price,true)]:null,t.wht?["Tax withheld",rs(t.wht)]:null,t.noCash?["Money moved","No, shares already owned"]:null,["Date",fdate(t.date)],["Amount",rs(t.amount)],t.fee?["Fee",rs(t.fee)]:null,t.cat&&t.type!=="income"?["Category",t.cat+(t.sub?" / "+t.sub:"")]:null,t.type==="income"?["Kind",t.sub]:null,t.merchant?[t.type==="fuel"?"Station":"Merchant",t.merchant]:null,t.desc?["Description",t.desc]:null,t.method?["Payment method",t.method]:null,t.acct?[t.type==="income"?"Into":"From account",acctLabel(acct(t.acct))]:null,t.toAcct?["To account",acctLabel(acct(t.toAcct))]:null,t.card?["Credit card",cardLabel(card(t.card))]:null,t.vehicle?["Vehicle",(veh(t.vehicle)||{}).name]:null,t.litres?["Litres",(+t.litres).toFixed(2)]:null,t.ppl?["Price per litre",rs(t.ppl,true)]:null,t.odo?["Odometer",nf0.format(t.odo)+" km"]:null,t.fuelType?["Fuel type",t.fuelType]:null,t.type==="cc_payment"?["Payment",t.full?"Full payment":"Partial payment"]:null,t.billDue?["Bill due date",fdate(t.billDue)]:null,t.ref?["Reference",t.ref]:null,t.recurring?["Recurring","Yes"]:null,t.notes?["Notes",t.notes]:null,["Counts as spending",e.spend?rs(e.spend):"No"]].filter(Boolean);
   openSheet(txTitle(t),`<div class="table-wrap"><table><tbody>${rows.map(([a,b])=>`<tr><td class="muted">${esc(a)}</td><td class="r" style="white-space:normal">${esc(b)}</td></tr>`).join("")}</tbody></table></div><div id="rcBox"></div>
-  <div class="actions"><button class="btn danger" data-act="del-tx" data-id="${t.id}">Delete</button><button class="btn" data-act="dup-tx" data-id="${t.id}" ${t.pawnId?"hidden":""}>Repeat today</button><button class="btn primary" data-act="edit-tx" data-id="${t.id}">Edit</button></div>`,
+  <div class="actions"><button class="btn danger" data-act="del-tx" data-id="${t.id}">Delete</button><button class="btn" data-act="dup-tx" data-id="${t.id}" ${t.pawnId||t.loanId?"hidden":""}>Repeat today</button><button class="btn primary" data-act="edit-tx" data-id="${t.id}">Edit</button></div>`,
   async root=>{if(t.receipt){root.querySelector("#rcBox").innerHTML='<p class="faint small" style="margin:10px 0">Loading receipt…</p>';try{const r=await Store.get("rc-"+t.id);root.querySelector("#rcBox").innerHTML=r&&r.img?`<img class="receipt-img" style="margin-top:10px" src="${r.img}" alt="Receipt">`:'<p class="faint small">Receipt not found.</p>'}catch(e){root.querySelector("#rcBox").innerHTML='<p class="faint small">Receipt could not be loaded.</p>'}}})}
 
 /* ---------- Entity forms ---------- */
@@ -1192,10 +1323,13 @@ function accountForm(a){a=a||{};const isEdit=!!a.id;const cur=isEdit?acctBal(a.i
   openSheet(isEdit?"Edit account":"Add bank account",`<form class="f" data-form="account" data-id="${a.id||""}">
   <div class="fr">${fld("Bank name",`<input name="bank" value="${esc(a.bank||"")}" placeholder="e.g. Commercial Bank" list="banks">`)}${fld("Account name",`<input name="name" required value="${esc(a.name||"")}" placeholder="e.g. Salary Account" autofocus>`)}</div>
   <datalist id="banks">${["Commercial Bank","Sampath Bank","HNB","Bank of Ceylon","People's Bank","NSB","Seylan Bank","NDB","DFCC Bank","Nations Trust Bank","Pan Asia Bank","Union Bank","Amana Bank","Cargills Bank"].map(b=>`<option value="${b}">`).join("")}</datalist>
-  <div class="fr">${fld("Account type",`<select name="type">${opt(ACCT_TYPES.map(x=>[x,x]),a.type||"Salary")}</select>`)}${fld("Account nickname, with last 4 digits",`<input name="nick" value="${esc(a.nick||"")}" placeholder="e.g. ending 4521">`)}</div>
-  <div class="fr">${fld("Opening balance",`<input type="number" step="any" name="opening" value="${a.opening??0}">`)}${fld("Currency",`<select name="currency">${opt(["LKR","USD","EUR","GBP","AUD","AED","INR"].map(c=>[c,c]),a.currency||"LKR")}</select>`)}</div>
+  <div class="fr">${fld("Account type",`<select name="type">${opt(ACCT_TYPES.map(x=>[x,x]),a.type||"Salary")}</select>`)}${fld("Account nickname",`<input name="nick" value="${esc(a.nick||"")}" placeholder="e.g. Main savings">`)}</div>
+  <div class="fr">${fld("Last 4 digits (optional)",`<input name="last4" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" value="${esc(a.last4||(a.nick||"").replace(/\D/g,"").slice(-4).length===4?a.last4||(a.nick||"").replace(/\D/g,"").slice(-4):"")}" placeholder="e.g. 4521">`)}<p class="hint" style="align-self:end">Lets Kasi recognise this account in bank SMS you paste.</p></div>
+  <div class="fr">${fld("Opening balance",`<input type="number" step="any" name="opening" value="${a.opening??0}">`)}${fld("Currency",`<select name="currency" data-cursel>${opt(["LKR","GBP","USD","EUR","AUD","AED","INR"].map(c=>[c,c]),a.currency||"LKR")}</select>`)}</div>
+  <div data-ratebox hidden>${fld(`<span data-ratelab>Exchange rate</span>`,`<input type="number" name="rate" step="0.0001" min="0" inputmode="decimal" placeholder="e.g. 395">`)}<p class="hint">Rupees for one unit of this currency. Kasi uses it to include this account in your totals and net worth. You can update it any time in Settings.</p></div>
   ${isEdit?fld("Current balance",`<input type="number" step="any" name="current" value="${Math.round(cur*100)/100}">`)+`<p class="hint">Calculated from the opening balance and every transaction. If it doesn't match your bank, type the real balance and Kasi adjusts the opening balance to match.</p>`:""}
-  <div class="actions">${isEdit&&a.id!=="cash"?`<button type="button" class="btn danger" data-act="del-account" data-id="${a.id}">Delete</button>`:""}<button type="button" class="btn" data-act="close">Cancel</button><button class="btn primary">${isEdit?"Save changes":"Add account"}</button></div></form>`)}
+  <div class="actions">${isEdit&&a.id!=="cash"?`<button type="button" class="btn danger" data-act="del-account" data-id="${a.id}">Delete</button>`:""}<button type="button" class="btn" data-act="close">Cancel</button><button class="btn primary">${isEdit?"Save changes":"Add account"}</button></div></form>`,root=>{const cs=root.querySelector("[data-cursel]"),box=root.querySelector("[data-ratebox]"),ri=root.querySelector("[name=rate]");
+    const upd=()=>{const c=cs.value;box.hidden=c==="LKR";root.querySelector("[data-ratelab]").textContent=`Exchange rate: 1 ${c} = Rs.`;ri.required=c!=="LKR"&&!rateFor(c);if(c!=="LKR"&&rateFor(c)&&!ri.value)ri.value=rateFor(c)};cs.addEventListener("change",upd);upd()})}
 function cardForm(c){c=c||{};const isEdit=!!c.id;const cur=isEdit?cardOut(c.id):"";
   openSheet(isEdit?"Edit credit card":"Add credit card",`<form class="f" data-form="card" data-id="${c.id||""}">
   <div class="fr">${fld("Card name",`<input name="name" required value="${esc(c.name||"")}" placeholder="e.g. Commercial Bank Visa" autofocus>`)}${fld("Bank",`<input name="bank" value="${esc(c.bank||"")}">`)}</div>
@@ -1223,7 +1357,8 @@ function billForm(b){b=b||{};const isEdit=!!b.id;const payv=b.payCard?"c:"+b.pay
   <div class="actions">${isEdit?`<button type="button" class="btn danger" data-act="del-bill" data-id="${b.id}">Delete</button>`:""}<button type="button" class="btn" data-act="close">Cancel</button><button class="btn primary">${isEdit?"Save changes":"Add bill"}</button></div></form>`)}
 
 function submitEntity(form){const kind=form.dataset.form,id=form.dataset.id;const fd=new FormData(form);const g=k=>(fd.get(k)??"").toString().trim();
-  if(kind==="account"){const a=id?acct(id):{id:uid()};Object.assign(a,{bank:g("bank"),name:g("name"),type:g("type"),nick:g("nick"),currency:g("currency")||"LKR",opening:+g("opening")||0});
+  if(kind==="account"){const a=id?acct(id):{id:uid()};Object.assign(a,{bank:g("bank"),name:g("name"),type:g("type"),nick:g("nick"),last4:g("last4").replace(/\D/g,"").slice(-4),currency:g("currency")||"LKR",opening:+g("opening")||0});
+    if(a.currency!=="LKR"&&+g("rate")>0){S.settings.rates=S.settings.rates||{};S.settings.rates[a.currency]=+g("rate")}
     if(id&&fd.has("current")){const cur=+g("current")||0;const calc=acctBal(id);if(Math.abs(cur-calc)>0.004){a.opening=Math.round((a.opening+(cur-calc))*100)/100}}
     if(!id)S.accounts.push(a);}
   else if(kind==="card"){const c=id?card(id):{id:uid(),opening:+g("opening")||0};Object.assign(c,{name:g("name"),bank:g("bank"),limit:+g("limit")||0,stmtDay:+g("stmtDay")||1,dueDay:+g("dueDay")||1,minPct:+g("minPct")||5,minFixed:+g("minFixed")||0,last4:g("last4").replace(/\D/g,"").slice(-4)});
@@ -1246,14 +1381,14 @@ document.addEventListener("click",async e=>{
     case "nav":closeSheet();go(ds.v);break;
     case "more":moreMenu();break;
     case "close":closeSheet();break;
-    case "add":if(!ds.type){chooser();break}closeSheet();if(ds.type==="pawn_new"){if(!S.accounts.length){accountForm();break}pawnForm();break}
+    case "add":if(!ds.type){chooser();break}closeSheet();if(ds.type==="pawn_new"){if(!S.accounts.length){accountForm();break}pawnForm();break}if(ds.type==="loan_new"){if(!S.accounts.length){accountForm();break}loanForm();break}
       if(!S.accounts.length){accountForm();break}
       txForm(ds.type,{},{card:ds.card,bill:ds.bill,due:ds.due,veh:ds.veh,cat:ds.cat,sub:ds.sub,tosav:ds.tosav,preset:ds.preset,asset:ds.asset,stock:ds.stock});
       if(ds.type==="expense"&&ds.cat==="Vehicle"&&ds.veh){}break;
     case "tx":{const t=findTx(ds.id);if(t)txDetail(t);break}
-    case "edit-tx":{const t=findTx(ds.id);if(t&&t.pawnId){closeSheet();const pw=pawn(t.pawnId);if(!pw)break;if(t.type==="pawn_take")pawnForm(pw);else pawnPayForm(pw,t);break}if(t){closeSheet();txForm(t.type==="cc_purchase"&&!t.cat?"cc_purchase":t.type==="cc_payment"?"cc_payment":t.type,t)}break}
+    case "edit-tx":{const t=findTx(ds.id);if(t&&t.loanId){closeSheet();const l=loan(t.loanId);if(!l)break;if(t.type==="loan_take")loanForm(l);else loanPayForm(l,t);break}if(t&&t.pawnId){closeSheet();const pw=pawn(t.pawnId);if(!pw)break;if(t.type==="pawn_take")pawnForm(pw);else pawnPayForm(pw,t);break}if(t){closeSheet();txForm(t.type==="cc_purchase"&&!t.cat?"cc_purchase":t.type==="cc_payment"?"cc_payment":t.type,t)}break}
     case "dup-tx":{const t=findTx(ds.id);if(t){const n=Object.assign({},t,{id:uid(),ts:Date.now(),date:today(),receipt:undefined});delete n.receipt;if(n.type==="bill"){delete n.billDue;delete n.billId}upsertTx(n);saveState();closeSheet();render();toast("Repeated for today")}break}
-    case "del-tx":{const t=findTx(ds.id);if(t&&t.type==="pawn_take"){toast("This is the loan itself. To remove it, delete the pawn on the Pawning page.");break}if(t&&confirm("Delete this transaction? Balances will update.")){deleteTx(t);closeSheet();render();toast("Deleted")}break}
+    case "del-tx":{const t=findTx(ds.id);if(t&&t.type==="loan_take"){toast("This is the loan itself. To remove it, delete the loan on the Loans page.");break}if(t&&t.type==="pawn_take"){toast("This is the loan itself. To remove it, delete the pawn on the Pawning page.");break}if(t&&confirm("Delete this transaction? Balances will update.")){deleteTx(t);closeSheet();render();toast("Deleted")}break}
     case "edit-account":closeSheet();accountForm(ds.id?acct(ds.id):null);break;
     case "edit-card":closeSheet();cardForm(ds.id?card(ds.id):null);break;
     case "edit-vehicle":closeSheet();vehicleForm(ds.id?veh(ds.id):null);break;
@@ -1268,6 +1403,11 @@ document.addEventListener("click",async e=>{
     case "del-stock":{const n=L().all.filter(t=>t.stockId===ds.id).length;if(n){toast(`This company has ${n} transaction${n===1?"":"s"}. Delete those first.`);break}if(confirm("Delete this company?")){S.stocks=S.stocks.filter(x=>x.id!==ds.id);saveState();invalidate();closeSheet();render()}break}
     case "paste":closeSheet();pasteSheet();break;
     case "sms-save":smsSave();break;
+    case "loan-new":closeSheet();if(!S.accounts.length){accountForm();break}loanForm();break;
+    case "loan-edit":{const l=loan(ds.id);closeSheet();if(l)loanForm(l);break}
+    case "loan-pay":{const l=loan(ds.id);closeSheet();if(l)loanPayForm(l,null,!!ds.extra);break}
+    case "loan-history":{const l=loan(ds.id);if(l)loanHistory(l);break}
+    case "loan-del":{const l=loan(ds.id);if(!l)break;const n=L().all.filter(t=>t.loanId===l.id).length;if(confirm(`Delete this loan${n?` and its ${n} transaction${n===1?"":"s"}`:""}? Your balances will change back.`)){for(const t of L().all.filter(t=>t.loanId===l.id))deleteTx(t);S.loans=S.loans.filter(x=>x!==l);saveState();invalidate();closeSheet();render();toast("Loan deleted")}break}
     case "pawn-new":closeSheet();if(!S.accounts.length){accountForm();break}pawnForm();break;
     case "pawn-edit":{const pw=pawn(ds.id);closeSheet();if(pw)pawnForm(pw);break}
     case "pawn-pay":{const pw=pawn(ds.id);closeSheet();if(pw){pawnPayForm.renew=!!ds.renew;pawnPayForm(pw)}break}
@@ -1293,6 +1433,8 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape"&&$("#modal").innerHT
 document.addEventListener("submit",e=>{const f=e.target;if(!f.dataset.form)return;e.preventDefault();const k=f.dataset.form;
   if(k==="tx")submitTx(f);
   else if(k==="paste"){openFromText(new FormData(f).get("text"))}
+  else if(k==="rates"){const fd=new FormData(f);S.settings.rates=S.settings.rates||{};for(const [kk,v] of fd.entries())if(kk.startsWith("r_")&&+v>0)S.settings.rates[kk.slice(2)]=+v;saveState();invalidate();render();toast("Exchange rates saved")}
+  else if(k==="loan")saveLoan(f);else if(k==="loanpay")saveLoanPay(f);
   else if(["account","card","vehicle","bill","asset","assetval","stock","prices"].includes(k)){submitEntity(f)}else if(k==="pawn")savePawn(f);else if(k==="pawnpay")savePawnPay(f);else if(false)submitEntity(f);
   else if(k==="salset"){const fd=new FormData(f);S.settings.salaryDay=Math.min(31,Math.max(1,+fd.get("salaryDay")||25));S.settings.expectedSalary=+fd.get("expectedSalary")||0;S.settings.plannedSavings=+fd.get("plannedSavings")||0;saveState();render();toast("Planner updated")}
   else if(k==="settings"){const fd=new FormData(f);S.settings.dueSoon=+fd.get("dueSoon")||5;S.settings.theme=fd.get("theme");applyTheme();saveState();render();toast("Settings saved")}
@@ -1323,7 +1465,8 @@ function loadDemo(){let seed=7;const rnd=()=>{seed=(seed*16807)%2147483647;retur
   S.vehicles=[{id:"aqua",name:"Toyota Aqua",reg:"CAB-1234",make:"Toyota",model:"Aqua",year:2015,fuel:"Hybrid (petrol)",odometer:84200},{id:"vezel",name:"Honda Vezel",reg:"CBK-5678",make:"Honda",model:"Vezel",year:2017,fuel:"Petrol",odometer:61800}];
   const start=addMonths(today(),-3,1);
   const B=(id,name,category,provider,amount,day,pay,veh,freq)=>({id,name,category,provider,amount,firstDue:ymd(onDay(parse(start).getFullYear(),parse(start).getMonth(),day)),freq:freq||"Monthly",payAcct:pay.startsWith("c:")?"":pay,payCard:pay.startsWith("c:")?pay.slice(2):"",vehicle:veh||"",ref:"",active:true});
-  S.bills=[B("elec","Electricity","Electricity","CEB",8600,10,"sal"),B("water","Water","Water","NWSDB",1850,15,"sal"),B("net","Home fibre","Internet","SLT-Mobitel",4990,12,"sal"),B("mob","Mobile","Mobile","Dialog",2400,18,"c:visa"),B("stream","Netflix","Streaming subscriptions","Netflix",2300,3,"c:visa"),B("lease","Vezel leasing","Loan","LOLC Finance",46500,5,"cur","vezel"),B("school","School fees","School/Education","Wycherley International",18000,7,"sal")];
+  S.bills=[B("elec","Electricity","Electricity","CEB",8600,10,"sal"),B("water","Water","Water","NWSDB",1850,15,"sal"),B("net","Home fibre","Internet","SLT-Mobitel",4990,12,"sal"),B("mob","Mobile","Mobile","Dialog",2400,18,"c:visa"),B("stream","Netflix","Streaming subscriptions","Netflix",2300,3,"c:visa"),B("school","School fees","School/Education","Wycherley International",18000,7,"sal")];
+  S.loans=[{id:"ln1",name:"Vezel leasing",lender:"LOLC Finance",kind:"Vehicle leasing",vehicle:"vezel",existing:true,owedAmount:1850000,owedDate:addMonths(today(),-3,1),principal:2600000,rate:16,term:48,instalment:52430,payDay:5,payFrom:"cur",notes:""}];
   S.pawns=[{id:"pw1",lender:"People's Bank",ticket:"PB-448120",items:"Gold chain",grams:16,karat:"22",assetId:"gold",principal:240000,rate:18,term:12,date:addMonths(today(),-2,6),dueDate:addMonths(addMonths(today(),-2,6),12),notes:""}];
   S.stocks=[{id:"comb",symbol:"COMB.N0000",name:"Commercial Bank of Ceylon",sector:"Banks",prices:[{date:addDays(today(),-1),price:131.75}]},
     {id:"jkh",symbol:"JKH.N0000",name:"John Keells Holdings",sector:"Capital Goods",prices:[{date:addDays(today(),-1),price:212.5}]},
@@ -1353,6 +1496,7 @@ function loadDemo(){let seed=7;const rnd=()=>{seed=(seed*16807)%2147483647;retur
   // fix card sources for random expenses
   for(const m in TX)for(const t of TX[m]){if(t.type==="expense"&&t.method==="Credit Card"){t.type="cc_purchase"}if(t.type==="cc_purchase"&&!t.card)t.card="mc";if((t.type==="expense")&&!t.acct)t.acct="cash"}
   add({type:"expense",cat:"Vehicle",sub:"Service",vehicle:"aqua",merchant:"Toyota Lanka",date:addMonths(t0,-1,12),amount:28500,method:"Credit Card",card:"visa"});
+  {let owed=1850000;for(let i=2;i>=0;i--){const d=addMonths(t0,-i,5);if(d>t0)continue;const it=Math.round(owed*16/1200*100)/100;const pp=Math.round((52430-it)*100)/100;owed-=pp;add({type:"loan_pay",loanId:"ln1",date:d,amount:52430,interest:it,principalPaid:pp,acct:"cur",method:"Bank Transfer",cat:"Bank charges",sub:"Loan interest"})}}
   add({type:"pawn_take",pawnId:"pw1",date:addMonths(t0,-2,6),amount:238500,fee:1500,cat:"Bank charges",sub:"Pawning fee",acct:"cash",method:"Bank Account",ref:"PB-448120"});
   add({type:"share_buy",stockId:"comb",date:addMonths(t0,-3,4),qty:1000,price:118,fee:1322,amount:119322,acct:"sav",method:"Bank Transfer",ref:"CN-10432"});
   add({type:"share_buy",stockId:"jkh",date:addMonths(t0,-2,11),qty:500,price:195,fee:1092,amount:98592,acct:"sav",method:"Bank Transfer",ref:"CN-10877"});
